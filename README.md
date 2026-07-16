@@ -63,7 +63,7 @@ Most of the time you do nothing. When you want to look things up:
 
 | Command | What it does |
 |---|---|
-| `akm search <keywords>` | Search (relevance × freshness × trust; superseded entries hidden by default) |
+| `akm search <keywords>` | Search (relevance × freshness × trust; superseded/quarantined hidden by default) |
 | `akm get <id>` | Full entry + metadata + provenance (and reinforces the entry — use it or lose it) |
 | `akm verify <id>` | Human endorsement: verified conclusions rank higher and never decay to zero |
 | `akm status` | Ledger health report: entry breakdown, stale warnings, failed-distill alerts |
@@ -80,7 +80,7 @@ You can also just ask your agent — the injected context includes `akm search` 
 
 - **Recorded**: deliverables that still matter when the session ends (final docs, code, data) + conclusions/decisions (with rationale and rejected alternatives) + work preferences you've expressed. The first entry is always a session summary: what happened, what came out of it
 - **Not recorded**: intermediate artifacts, drafts, replaced versions, chat-only sessions (sessions that write no files cost nothing and record nothing) — **capture everything, distill little; forgetting is a feature, not a bug**
-- **Automatic metabolism**: new versions supersede old ones (uncertain cases coexist); entries unretrieved for 30 days get demoted and flagged in `status`; frequently used entries rank up; preference entries never decay
+- **Automatic metabolism**: new versions supersede old ones (uncertain cases coexist; entries you've verified are never auto-superseded); entries unretrieved for 30 days get demoted and flagged in `status` (staleness is computed at query time — ledger files are never rewritten); frequently used entries rank up; preference entries never decay. Files over 4MB are recorded by path without a content hash
 
 ## Where the data lives, and what it looks like
 
@@ -112,6 +112,7 @@ The fields are the product: `coords` is a stable address (same topic iterates un
 - **Zero waiting**: hooks return in milliseconds; distillation runs in a detached background process
 - **Everything local**: ledger, index, and archives live on your disk; the only network call is the distillation above, on your own account
 - **Archive disclosure (important)**: distillation archives a **plaintext** excerpt of the conversation into the ledger (`journal/<session>.transcript.md`) for provenance audits. If your ledger sits in a cloud-synced folder, that sync includes conversation text. Disable with `"archive_transcripts": false` in `~/.akm/config.json` (trade-off: provenance breaks once the host cleans up old sessions)
+- **Prompt-injection status, honestly**: third-party content your agent processes (web pages, external files) flows into distillation input. Three hard defenses exist (file-path allowlist, verification bits force-cleared by the pipeline, human-verified entries never auto-superseded), but injected content is not yet fully sanitized — the threat model is limited while you're single-user on your own data, and full hardening lands before external content-pack imports ship. Don't blindly trust a distill run right after your agent processed untrusted content
 - **Walk away anytime**: `akm uninstall` removes the hooks and leaves you a plain folder
 
 ## Cross-host (MCP)

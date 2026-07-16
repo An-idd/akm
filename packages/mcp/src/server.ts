@@ -31,9 +31,13 @@ const server = new McpServer({ name: "akm", version: "0.1.0" });
 server.tool(
   "akm_search",
   "检索历史产出物账本（跨 Agent 共享）。返回条目坐标+摘要，按相关性×新鲜度×可信度排序，已取代的默认过滤。",
-  { query: z.string().describe("关键词，中英文均可"), limit: z.number().int().positive().max(50).default(10) },
-  async ({ query, limit }) => {
-    const hits = search({ query, limit, staleDays: config.stale_days });
+  {
+    query: z.string().describe("关键词，中英文均可"),
+    limit: z.number().int().positive().max(50).default(10),
+    project: z.string().optional().describe("项目作用域标识（.akm 标记里的 project）；不传则只见 user 级条目"),
+  },
+  async ({ query, limit, project }) => {
+    const hits = search({ query, limit, project, staleDays: config.stale_days });
     const text = hits.length
       ? hits
           .map(

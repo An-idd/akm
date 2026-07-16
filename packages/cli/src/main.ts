@@ -42,8 +42,15 @@ const CLAUDE_SETTINGS =
   process.env.CLAUDE_SETTINGS ?? join(homedir(), ".claude", "settings.json");
 
 function selfCmd(): string {
-  // 编译后的单二进制 Bun.main 在虚拟文件系统里；开发期用 bun 跑源码
-  return Bun.main.startsWith("/$bunfs") ? process.execPath : `bun ${Bun.main}`;
+  // 编译后的单二进制 Bun.main 在虚拟文件系统里；开发期用 bun 跑源码。
+  // 路径含空格必须加引号——hook 命令静默失效是卸载导火索
+  const q = (p: string) => (p.includes(" ") ? `"${p}"` : p);
+  return Bun.main.startsWith("/$bunfs") ? q(process.execPath) : `bun ${q(Bun.main)}`;
+}
+
+// session id 会拼进文件名：只接受受信形状（UUID/字母数字），异常输入直接不处理
+function validSession(s: unknown): s is string {
+  return typeof s === "string" && /^[\w.-]+$/.test(s);
 }
 
 async function readStdinJson(): Promise<any> {
@@ -118,7 +125,7 @@ async function cmdCapture() {
     const input = await readStdinJson();
     const path: string | undefined =
       input?.tool_input?.file_path ?? input?.tool_input?.notebook_path;
-    if (!path || !input.session_id) return;
+    if (!path || !validSession(input.session_id)) return;
     // 账本与缓存自身的写入不记录，避免自反馈（精确前缀匹配，不误伤路径里碰巧含 .akm 的文件）
     if (
       path === config.ledger || path.startsWith(config.ledger + "/") ||
@@ -159,7 +166,7 @@ async function cmdDistill(flags: string[]) {
     if (!config) return;
     const input = await readStdinJson();
     const session: string | undefined = input.session_id ?? arg(flags, "--session");
-    if (!session) return;
+    if (!session || !validSession(session)) return;
     sessionRef = session;
     const journal = readJournal(config.ledger, session);
     // ponytail: 只蒸馏写过文件的会话；纯对话会话的结论蒸馏等真实需求出现再开
@@ -434,8 +441,11 @@ async function cmdHydrate() {
       const all = search({ project, limit: 1000, staleDays: config.stale_days });
       if (!all.length) return; // 空账本零注入——宁可不注入，不可注入垃圾
       const prefs = all.filter((h) => h.type === "preference");
-      context = buildHydrationContext(prefs, config.hydrate_budget);
-      context += `${context ? "" : "[akm] "}账本有 ${all.length} 条活跃条目；需要历史结论/文件/口径时用 \`akm search <关键词>\`（相关条目会在你第一条消息后自动注入）。\n`;
+      const { estimateTokens } = await import("@akm/core");
+      const guide = `账本有 ${all.length} 条活跃条目；需要历史结论/文件/口径时用 \`akm search <关键词>\`（相关条目会在你第一条消息后自动注入）。\n`;
+      // 导览行计入同一预算，不绕核算
+      context = buildHydrationContext(prefs, config.hydrate_budget - estimateTokens(guide));
+      context += `${context ? "" : "[akm] "}${guide}`;
     }
 
     if (!context) return;

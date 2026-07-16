@@ -19,8 +19,12 @@ export interface CompactOutput {
 }
 
 export async function compactLedger(ctx: CompactContext): Promise<CompactOutput> {
+  // preference 不参与合并（并入 conclusion 会静默剥夺"永不衰减"特权）；
+  // verified 条目不参与（合并产物验证位归零，等于没收人工背书）
   const active = [...ctx.entries.values()].filter(
-    (e) => e.status !== "superseded" && e.status !== "quarantined",
+    (e) =>
+      e.status !== "superseded" && e.status !== "quarantined" &&
+      e.type !== "preference" && e.verified_by.length === 0,
   );
   if (active.length < 2) return { fresh: [], retired: [], bodies: {} }; // 没什么可压的
 
