@@ -1,0 +1,7 @@
+node_modules/
+dist/
+eval/
+
+# 私人文档：含个人项目细节/未定稿思考，不进公开仓库
+2026-07-15-agent生态开发者空缺-brainstorm.md
+docs/使用场景与优势地图.md

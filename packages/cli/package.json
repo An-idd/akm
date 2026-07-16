@@ -1,0 +1,9 @@
+{
+  "name": "akm",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": { "akm": "src/main.ts" },
+  "dependencies": {
+    "@akm/core": "workspace:*"
+  }
+}

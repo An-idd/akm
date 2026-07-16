@@ -1,0 +1,6 @@
+{
+  "name": "akm",
+  "description": "Agent 产出物管理层：自动登记文件写入，会话结束蒸馏结论，新会话按需水合历史产出物。删掉它，你的数据还是普通的 markdown 和 jsonl。",
+  "version": "0.1.0",
+  "hooks": "./hooks/hooks.json"
+}

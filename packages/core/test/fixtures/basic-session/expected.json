@@ -1,0 +1,48 @@
+[
+  {
+    "id": "af3212c5b95c92c0",
+    "coords": {
+      "namespace": "self",
+      "name": "topic-scan",
+      "version": 1
+    },
+    "type": "file",
+    "status": "final",
+    "summary": "选题扫描调研：方向 A 数据支撑最强，方向 B 已有头部占位",
+    "provenance": {
+      "host": "claude-code",
+      "session": "golden-session",
+      "inputs": [
+        "/work/demo/tmp/scratch.md"
+      ]
+    },
+    "verified_by": [],
+    "scope": "user",
+    "created": "2026-01-01T00:00:00.000Z",
+    "path": "/work/demo/research/2026-01-01-topic-scan.md",
+    "content_hash": "sha256:ffff"
+  },
+  {
+    "id": "96ecd90dea78f647",
+    "coords": {
+      "namespace": "self",
+      "name": "topic-direction",
+      "version": 1
+    },
+    "type": "decision",
+    "status": "final",
+    "summary": "决定押方向 A，放弃方向 B（头部占位）",
+    "provenance": {
+      "host": "claude-code",
+      "session": "golden-session",
+      "inputs": [
+        "/work/demo/research/2026-01-01-topic-scan.md",
+        "/work/demo/tmp/scratch.md",
+        "/work/demo/research/2026-01-01-topic-scan.md"
+      ]
+    },
+    "verified_by": [],
+    "scope": "user",
+    "created": "2026-01-01T00:00:00.000Z"
+  }
+]

@@ -1,0 +1,11 @@
+{
+  "name": "akm-monorepo",
+  "private": true,
+  "workspaces": ["packages/*"],
+  "scripts": {
+    "test": "bun test"
+  },
+  "devDependencies": {
+    "@types/bun": "^1.2.0"
+  }
+}

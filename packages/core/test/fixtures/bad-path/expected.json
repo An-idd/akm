@@ -1,0 +1,23 @@
+[
+  {
+    "id": "3ec620c1a2b7d5d8",
+    "coords": {
+      "namespace": "self",
+      "name": "real-conclusion",
+      "version": 1
+    },
+    "type": "conclusion",
+    "status": "final",
+    "summary": "合法结论保留",
+    "provenance": {
+      "host": "claude-code",
+      "session": "golden-session",
+      "inputs": [
+        "/work/demo/real.md"
+      ]
+    },
+    "verified_by": [],
+    "scope": "user",
+    "created": "2026-01-01T00:00:00.000Z"
+  }
+]

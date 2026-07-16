@@ -1,0 +1,20 @@
+{
+  "distill": {
+    "items": [
+      {
+        "type": "file",
+        "name": "fabricated",
+        "summary": "模型幻觉出的路径，应被丢弃",
+        "status": "final",
+        "path": "relative/or/hallucinated.md"
+      },
+      {
+        "type": "conclusion",
+        "name": "real-conclusion",
+        "summary": "合法结论保留",
+        "status": "final",
+        "body": "正文"
+      }
+    ]
+  }
+}

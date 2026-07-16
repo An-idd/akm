@@ -1,0 +1,20 @@
+{
+  "distill": {
+    "items": [
+      {
+        "type": "file",
+        "name": "topic-scan",
+        "summary": "选题扫描调研：方向 A 数据支撑最强，方向 B 已有头部占位",
+        "status": "final",
+        "path": "/work/demo/research/2026-01-01-topic-scan.md"
+      },
+      {
+        "type": "decision",
+        "name": "topic-direction",
+        "summary": "决定押方向 A，放弃方向 B（头部占位）",
+        "status": "final",
+        "body": "方向 A 数据支撑最强；方向 B 已有头部占位，放弃。"
+      }
+    ]
+  }
+}
