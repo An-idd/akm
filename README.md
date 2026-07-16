@@ -18,6 +18,26 @@ After your first message → local relevance search over the ledger, inject matc
                             history (hard token budget)
 ```
 
+## Is this for you?
+
+**Built for you** if you match "solo + heavy agent use + your outputs are your livelihood + your work is a series, not one-offs":
+
+- **Content creators / serial writers** — when chapter 45 starts, the agent already knows the character sheets, the open foreshadowing, and why that plan was rejected last time. No re-feeding 44 chapters
+- **Independent analysts / recurring research** — re-run this month's analysis next month and the numbers reconcile: the methodology lives in the ledger, not in one session's luck
+- **Vibe coders** (you ship with AI but don't use git) — which file is the live version, which approach was proven dead three weeks ago: akm remembers (note: it records *which version is final*, it does not store file contents — it is not a backup)
+- **Multi-agent / multi-model users** — what Claude Code accumulates, Codex/ZCode can query out of the box via MCP
+
+**Not for you** if your sessions are one-off tasks (value delivered on the spot, nothing worth keeping — that's fine), chat-only consultations (no files written, nothing recorded), or a heavyweight engineering team (git + CI is already the better artifact layer; that's their home turf).
+
+## How it differs from what you already have
+
+| Versus | The one-line boundary |
+|---|---|
+| Just re-running | Re-runs can't buy back **consistency** or **verified status** — no model speed fixes two reports that disagree |
+| claude-mem & memory frameworks | They record the **process** (what happened in a session); akm records the **results** (what assets remain, what superseded what, what's been verified) |
+| CLAUDE.md / platform memory | Platforms remember *facts about you*, locked inside their own fence; akm records *your outputs*, in plain files you can walk away with |
+| git | akm's territory is exactly git's blind spot: decision rationale, rejected alternatives, and outputs that never enter a repo (research, strategy, methodology) |
+
 ## Three promises
 
 1. **Your data stays in plain files you can grep** — the ledger is a folder of markdown and jsonl. Delete akm and everything is still there; you lose convenience, not assets
