@@ -379,6 +379,38 @@ async function cmdCompact(flags: string[]) {
   console.log(`\n压实完成：${retired.length} 条来源转 superseded，新增 ${fresh.length} 条合并产物。`);
 }
 
+// 矛盾检测：找出账本里事实上互相打架的条目对。手动触发（要调 LLM，status 不能背这个成本）。
+// 只报告——绝不自动改状态。结果缓存供 status 提示。
+async function cmdConflicts() {
+  const config = requireConfig();
+  const { findConflicts } = await import("@akm/core");
+  const all = readManifests(config.ledger);
+  const bodyOf = (id: string) => {
+    const e = all.get(id);
+    if (!e) return undefined;
+    const p = entryBodyAbsPath(config.ledger, e);
+    return existsSync(p) ? readFileSync(p, "utf8") : undefined;
+  };
+  const reports = await findConflicts({ entries: all, bodyOf, provider: makeProvider() });
+  // 缓存给 status 用（和 last-distill-error.json 同一套路）
+  try {
+    writeFileSync(join(CACHE_DIR, "last-conflicts.json"), JSON.stringify({
+      at: new Date().toISOString(), count: reports.length,
+    }));
+  } catch {}
+  if (!reports.length) {
+    console.log("没发现事实矛盾的条目对（拿不准的不报）。");
+    return;
+  }
+  console.log(`发现 ${reports.length} 对疑似矛盾（只报告，不自动改动——你来定夺：verify 一方 / 手动 supersede / 无视）：\n`);
+  for (const r of reports) {
+    const v = (e: typeof r.a) => e.verified_by.length ? " ✓已验证" : "";
+    console.log(`⚠ ${r.why}`);
+    console.log(`  [${r.a.id}] ${r.a.coords.name}${v(r.a)} — ${r.a.summary}`);
+    console.log(`  [${r.b.id}] ${r.b.coords.name}${v(r.b)} — ${r.b.summary}\n`);
+  }
+}
+
 // 会话导出：jsonl → 可读 markdown（对话全文 + 文件写入标记）
 async function cmdExport(flags: string[]) {
   const target = flags.find((f) => !f.startsWith("--"));
@@ -503,6 +535,10 @@ async function cmdStatus() {
       console.log(`\n⚠ 最近一次蒸馏失败（${errInfo.at.slice(0, 16)}，会话 ${String(errInfo.session).slice(0, 8)}）：${errInfo.error}`);
     }
   } catch {}
+  try {
+    const c = JSON.parse(readFileSync(join(CACHE_DIR, "last-conflicts.json"), "utf8"));
+    if (c.count > 0) console.log(`\n⚠ 上次扫描发现 ${c.count} 对疑似矛盾（${String(c.at).slice(0, 16)}），跑 \`akm conflicts\` 看详情。`);
+  } catch {}
   if (!entries.length) console.log(`\n账本为空。跑几个会写文件的会话，Stop hook 会自动蒸馏入账。`);
 }
 
@@ -526,6 +562,7 @@ async function cmdHelp() {
   verify <id> [--by <名字>]        人工背书条目（verified 排序上浮、衰减有下限）
   status                           账本健康报表
   compact [--dry]                  压实账本：合并同主题条目（保守，拿不准不动）
+  conflicts                        扫出事实矛盾的条目对（只报告，你来定夺）
   export <会话id|路径> [--out f]   会话记录导出为可读 markdown
   rebuild                          全量重建索引（索引永远是缓存）
   migrate                          旧扁平正文迁移到坐标目录
@@ -545,6 +582,7 @@ const commands: Record<string, (flags: string[]) => Promise<void>> = {
   get: cmdGet,
   verify: cmdVerify,
   compact: cmdCompact,
+  conflicts: cmdConflicts,
   export: cmdExport,
   rebuild: cmdRebuild,
   migrate: cmdMigrate,

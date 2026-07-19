@@ -49,10 +49,29 @@ export function parseCompactLenient(raw: unknown): CompactResult {
   }) };
 }
 
+// conflicts：找事实上互相打架的条目对（只报告，不改状态）
+export const ConflictPair = z.object({
+  a: z.string(),
+  b: z.string(),
+  why: z.string(),
+});
+export const ConflictResult = z.object({ pairs: z.array(ConflictPair).default([]) });
+export type ConflictResult = z.infer<typeof ConflictResult>;
+
+export function parseConflictsLenient(raw: unknown): ConflictResult {
+  const pairs = (raw as any)?.pairs;
+  if (!Array.isArray(pairs)) throw new Error("conflicts 输出缺 pairs 数组");
+  return { pairs: pairs.flatMap((p) => {
+    const r = ConflictPair.safeParse(p);
+    return r.success ? [r.data] : [];
+  }) };
+}
+
 export interface Provider {
   distill(prompt: string): Promise<DistillResult>;
   judge(prompt: string): Promise<JudgeVerdict>;
   compact(prompt: string): Promise<CompactResult>;
+  conflicts(prompt: string): Promise<ConflictResult>;
 }
 
 // golden 夹具用：确定性回放
@@ -61,6 +80,7 @@ export class MockProvider implements Provider {
     private distillResponse: DistillResult = { items: [] },
     private judgeResponse: JudgeVerdict = "unsure",
     private compactResponse: CompactResult = { clusters: [] },
+    private conflictsResponse: ConflictResult = { pairs: [] },
   ) {}
   async distill(): Promise<DistillResult> {
     return DistillResult.parse(this.distillResponse);
@@ -70,5 +90,8 @@ export class MockProvider implements Provider {
   }
   async compact(): Promise<CompactResult> {
     return CompactResult.parse(this.compactResponse);
+  }
+  async conflicts(): Promise<ConflictResult> {
+    return ConflictResult.parse(this.conflictsResponse);
   }
 }

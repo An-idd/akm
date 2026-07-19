@@ -8,3 +8,4 @@ export * from "./claude-cli";
 export * from "./search";
 export * from "./hydrate";
 export * from "./compact";
+export * from "./conflicts";

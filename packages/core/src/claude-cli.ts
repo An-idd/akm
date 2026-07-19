@@ -1,6 +1,6 @@
 import {
-  CompactResult, DistillResult, JudgeVerdict,
-  parseCompactLenient, parseDistillLenient, Provider,
+  CompactResult, ConflictResult, DistillResult, JudgeVerdict,
+  parseCompactLenient, parseConflictsLenient, parseDistillLenient, Provider,
 } from "./provider";
 
 // LLM 经 `claude -p` 子进程调用：复用宿主登录，零 API key。
@@ -51,6 +51,10 @@ export class ClaudeCliProvider implements Provider {
 
   async compact(prompt: string): Promise<CompactResult> {
     return this.withRetry(async () => parseCompactLenient(extractJson(await this.run(prompt))));
+  }
+
+  async conflicts(prompt: string): Promise<ConflictResult> {
+    return this.withRetry(async () => parseConflictsLenient(extractJson(await this.run(prompt))));
   }
 }
 
