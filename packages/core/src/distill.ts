@@ -137,7 +137,8 @@ export function buildDistillPrompt(ctx: DistillContext): string {
     ctx.transcriptSummary || "（无）",
     ``,
     `## 规则`,
-    `- 若会话有任何值得留存的内容，第一条必须是 conclusion：概括本会话主要做了什么、产出了什么、结果如何——这是整个会话的检索入口`,
+    `- 先判断这次会话有没有"值得跨会话留存的东西"，判据（命中任一即算有）：① 做了决策并否掉了别的方案（选了什么、砍了什么、为什么）；② 得出代价高或不可复现的结论/数字/口径/方法论；③ 产出会话结束后仍当真的交付物。三条全落空（纯查询、纯机械小改、无决策的维护）——整个会话返回空数组，什么都别产出`,
+    `- 若命中，第一条必须是 conclusion：概括本会话主要做了什么、产出了什么、结果如何——这是整个会话的检索入口（它是真实内容的表头，不是每次会话都开的回执）`,
     `- 会话中每个独立的决策各记一条 decision（含理由、否掉了什么），不要合并、不要只挑最后一个`,
     `- 用户明确表达的工作偏好与协作规则（"以后都这样做""别问直接改""口径按 X 算"）单独产出 type: preference 条目——这是跨会话常驻的规则，name 稳定复用（如 no-ask-before-optimize）`,
     `- summary 硬性 ≤50 字，只答"这是什么、结论是什么"；细节、理由、清单全部放 body——summary 是检索键，肥了会挤占注入预算`,
@@ -148,7 +149,7 @@ export function buildDistillPrompt(ctx: DistillContext): string {
     `- file 型条目：path 必须来自上面的 journal 列表；summary 写这份文件"是什么、结论是什么"，是检索键不是简介`,
     `- conclusion/decision 型条目：body 写完整结论及理由（含否掉了什么、为什么）`,
     `- name 用 kebab-case 英文，稳定可寻址（同一主题下次迭代应产生相同 name）`,
-    `- 拿不准就不产出。空会话返回空数组。`,
+    `- 拿不准就不产出。空会话、以及上面三条判据全落空的琐碎会话，都返回空数组（宁可漏，不可堆垃圾）。`,
     ``,
     `只输出 JSON：{"items":[{"type":"file|conclusion|decision","name":"...","summary":"...","status":"draft|final","path":"...","body":"..."}]}`,
   ].join("\n");

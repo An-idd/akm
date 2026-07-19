@@ -78,7 +78,7 @@ You can also just ask your agent — the injected context includes `akm search` 
 
 ## What gets recorded, what doesn't
 
-- **Recorded**: deliverables that still matter when the session ends (final docs, code, data) + conclusions/decisions (with rationale and rejected alternatives) + work preferences you've expressed. The first entry is always a session summary: what happened, what came out of it
+- **Recorded**: deliverables that still matter when the session ends (final docs, code, data) + conclusions/decisions (with rationale and rejected alternatives) + work preferences you've expressed. A session that leaves at least one of those leads with a session-summary entry (what happened, what came out of it); a session that leaves none — pure lookups, mechanical edits, no-decision maintenance — records nothing at all, not even a summary
 - **Not recorded**: intermediate artifacts, drafts, replaced versions, chat-only sessions (sessions that write no files cost nothing and record nothing) — **capture everything, distill little; forgetting is a feature, not a bug**
 - **Automatic metabolism**: new versions supersede old ones (uncertain cases coexist; entries you've verified are never auto-superseded); entries unretrieved for 30 days get demoted and flagged in `status` (staleness is computed at query time — ledger files are never rewritten); frequently used entries rank up; preference entries never decay. Files over 4MB are recorded by path without a content hash
 
