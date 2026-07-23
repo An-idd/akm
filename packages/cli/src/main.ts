@@ -141,6 +141,17 @@ async function cmdCapture() {
       path,
       hash: fileHash(path),
     }));
+    // 会话索引住缓存层：macOS TCC 拦文稿目录的枚举（放行精确路径），
+    // distill-all 靠这份索引找会话，不 scandir 账本
+    try {
+      const idxFile = join(CACHE_DIR, "session-index.json");
+      let idx: Record<string, number> = {};
+      try { idx = JSON.parse(readFileSync(idxFile, "utf8")); } catch {}
+      if (!idx[input.session_id]) {
+        idx[input.session_id] = Date.now();
+        writeFileSync(idxFile, JSON.stringify(idx));
+      }
+    } catch {}
   } catch {
     // 静默：capture 永不打扰宿主
   }
@@ -304,11 +315,20 @@ function findTranscript(session: string): string | undefined {
 async function cmdDistillAll() {
   const config = requireConfig();
   const journalDir = ledgerPaths(config.ledger).journalDir;
-  if (!existsSync(journalDir)) return console.log("（无 journal）");
-  const sessions = readdirSync(journalDir)
-    .filter((f) => f.endsWith(".jsonl"))
-    .map((f) => f.replace(/\.jsonl$/, ""))
-    .filter(validSession);
+  // 会话清单：缓存索引 + 蒸馏状态为主，scandir 只作补充（TCC 可能拒绝枚举文稿目录）
+  const known = new Set<string>();
+  for (const f of ["session-index.json", "distill-state.json"]) {
+    try {
+      for (const k of Object.keys(JSON.parse(readFileSync(join(CACHE_DIR, f), "utf8")))) known.add(k);
+    } catch {}
+  }
+  try {
+    for (const f of readdirSync(journalDir)) {
+      if (f.endsWith(".jsonl")) known.add(f.replace(/\.jsonl$/, ""));
+    }
+  } catch {}
+  const sessions = [...known].filter(validSession);
+  if (!sessions.length) return console.log("（无已知会话）");
   let done = 0, skipped = 0, failed = 0;
   for (const session of sessions) {
     try {
@@ -490,11 +510,32 @@ async function cmdExport(flags: string[]) {
 
 // 水合是拉模型：SessionStart 只注入偏好常驻 + 账本导览；
 // UserPromptSubmit（会话首条消息）用消息文本做纯本地相关性检索——这才是"按相关性注入"
+// 每日模式兜底：launchd 在 macOS 上可能无文稿目录权限（TCC），
+// 改由当天第一次 hook 活动（继承宿主权限）后台拉起批处理；与 launchd 幂等共存
+function maybeSpawnDailyBatch(config: Config): void {
+  try {
+    if (config.distill_mode !== "daily") return;
+    const f = join(CACHE_DIR, "daily-state.json");
+    const today = new Date().toISOString().slice(0, 10);
+    let st: Record<string, string> = {};
+    try { st = JSON.parse(readFileSync(f, "utf8")); } catch {}
+    if (st.last === today) return;
+    writeFileSync(f, JSON.stringify({ last: today }));
+    const argv = Bun.main.startsWith("/$bunfs") ? [process.execPath] : ["bun", Bun.main];
+    const child = Bun.spawn([...argv, "distill-all"], {
+      stdin: "ignore", stdout: "ignore", stderr: "ignore",
+      env: process.env as Record<string, string>,
+    });
+    child.unref();
+  } catch {}
+}
+
 async function cmdHydrate() {
   try {
     if (process.env.AKM_DISTILLING) return;
     const config = loadConfig();
     if (!config) return;
+    maybeSpawnDailyBatch(config);
     const input = await readStdinJson();
     const eventName: string = input.hook_event_name ?? "SessionStart";
     const session: string = input.session_id ?? "";
@@ -558,7 +599,13 @@ async function cmdStatus() {
   const config = requireConfig();
   const entries = [...readManifests(config.ledger).values()];
   const paths = ledgerPaths(config.ledger);
-  const sessions = existsSync(paths.journalDir) ? readdirSync(paths.journalDir).length : 0;
+  let sessions = 0;
+  try {
+    sessions = readdirSync(paths.journalDir).length;
+  } catch {
+    // TCC 拒绝枚举时退回缓存索引
+    try { sessions = Object.keys(JSON.parse(readFileSync(join(CACHE_DIR, "session-index.json"), "utf8"))).length; } catch {}
+  }
   const byStatus: Record<string, number> = {};
   const byType: Record<string, number> = {};
   for (const e of entries) {
@@ -638,8 +685,8 @@ async function cmdSchedule(flags: string[]) {
   saveConfig({ ...config, distill_mode: "daily" });
   // capture/hydrate 保留（登记和注入仍需实时），只把蒸馏从会话结束挪到定时批处理
   installClaudeHooks(CLAUDE_SETTINGS, selfCmd(), false);
-  console.log(`每日蒸馏已开启：每天 ${at} 批处理当日所有有新写入的会话（launchd 拉起，跑完即退）。`);
-  console.log(`会话结束不再实时蒸馏；想立刻补跑：akm distill-all。关闭：akm schedule --off。`);
+  console.log(`每日蒸馏已开启：每天 ${at} launchd 批处理（跑完即退）；若系统未授予定时任务文稿权限，`);
+  console.log(`当天第一次会话也会自动兜底补跑。会话结束不再实时蒸馏；手动补跑：akm distill-all。关闭：akm schedule --off。`);
 }
 
 async function cmdUninstall() {

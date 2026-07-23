@@ -224,6 +224,17 @@ akm init --yes --ledger "$SCRATCH/ledger" >/dev/null
 grep -q '"distill_mode": "daily"' "$AKM_HOME/config.json" || fail "init 洗掉了 distill_mode"
 grep -qE 'akm.* distill' "$CLAUDE_SETTINGS" && fail "init 在 daily 模式下装回 distill hooks"
 
+# 每日模式兜底：当天首次 hydrate 自动后台拉起批处理（launchd 无权限时的退路）
+echo "s8" > "$SCRATCH/project/s8.md"
+echo "{\"session_id\":\"s8\",\"cwd\":\"$SCRATCH/project\",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$SCRATCH/project/s8.md\"}}" | akm capture
+cat > "$SCRATCH/mock.json" <<EOF
+{"distill":{"items":[{"type":"file","name":"s8-doc","summary":"兜底批处理测试","status":"final","path":"$SCRATCH/project/s8.md"}]}}
+EOF
+echo "{\"session_id\":\"h2\",\"cwd\":\"$SCRATCH/project\",\"hook_event_name\":\"SessionStart\"}" | akm hydrate >/dev/null
+for i in $(seq 1 20); do grep -q s8-doc "$SCRATCH/ledger/manifests.jsonl" 2>/dev/null && break; sleep 0.5; done
+grep -q s8-doc "$SCRATCH/ledger/manifests.jsonl" || fail "每日兜底批处理未触发"
+[ -f "$AKM_HOME/cache/daily-state.json" ] || fail "daily-state 未记录"
+
 # schedule --off 恢复实时蒸馏
 akm schedule --off | grep -q '已关闭' || fail "schedule 关闭失败"
 [ -f "$SCRATCH/launch/com.akm.daily-distill.plist" ] && fail "plist 未删除"
