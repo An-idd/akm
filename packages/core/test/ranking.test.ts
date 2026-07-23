@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { scoreEntry } from "@akm/core";
-import { estimateTokens } from "@akm/core";
+import { scoreEntry } from "@stillyou/core";
+import { estimateTokens } from "@stillyou/core";
 
 const NOW = new Date("2026-07-16T00:00:00.000Z");
 const YEAR_AGO = "2025-07-16T00:00:00.000Z";

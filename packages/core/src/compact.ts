@@ -56,7 +56,7 @@ export async function compactLedger(ctx: CompactContext): Promise<CompactOutput>
       id: entryId(base),
       status: "final",
       provenance: {
-        host: ctx.host ?? "akm",
+        host: ctx.host ?? "stillyou",
         session: `compact-${ctx.now.slice(0, 10)}`,
         inputs: ids,
       },

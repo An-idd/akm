@@ -2,7 +2,7 @@ import { Entry } from "./schema";
 import { Provider } from "./provider";
 
 // 矛盾检测：找出账本里事实上互相打架的条目对——只报告，绝不改状态。
-// akm 首页承诺的是 consistency（两份报告打架你不知信哪个），但目前只有 supersede，
+// stillyou 首页承诺的是 consistency（两份报告打架你不知信哪个），但目前只有 supersede，
 // 而 supersede 只管"同名新版覆盖旧版"；两条不同 name 的结论在事实上冲突，
 // 是 supersede 看不见的盲区，这里补上。
 // 铁律照 compact：拿不准不报，报了也绝不自动改 status——人来定夺（verify 一方 / 手动 supersede / 无视）。

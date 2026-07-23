@@ -17,24 +17,24 @@ import {
   recordAccess,
   search,
   writeEntryBody,
-} from "@akm/core";
+} from "@stillyou/core";
 
 const config = loadConfig();
 if (!config) {
-  console.error("akm 未初始化：先在终端跑 `akm init`");
+  console.error("stillyou 未初始化：先在终端跑 `stillyou init`");
   process.exit(1);
 }
 const ledger = config.ledger;
 
-const server = new McpServer({ name: "akm", version: "0.1.0" });
+const server = new McpServer({ name: "stillyou", version: "0.1.0" });
 
 server.tool(
-  "akm_search",
+  "stillyou_search",
   "检索历史产出物账本（跨 Agent 共享）。返回条目坐标+摘要，按相关性×新鲜度×可信度排序，已取代的默认过滤。",
   {
     query: z.string().describe("关键词，中英文均可"),
     limit: z.number().int().positive().max(50).default(10),
-    project: z.string().optional().describe("项目作用域标识（.akm 标记里的 project）；不传则只见 user 级条目"),
+    project: z.string().optional().describe("项目作用域标识（.stillyou 标记里的 project）；不传则只见 user 级条目"),
   },
   async ({ query, limit, project }) => {
     const hits = search({ query, limit, project, staleDays: config.stale_days });
@@ -44,16 +44,16 @@ server.tool(
             (h) =>
               `- [${h.id}] ${h.name}@v${h.version} (${h.type}/${h.status}${h.stale ? "/stale" : ""}, ${h.created.slice(0, 10)}) ${h.summary}`,
           )
-          .join("\n") + "\n\n用 akm_get 取全文与溯源。"
+          .join("\n") + "\n\n用 stillyou_get 取全文与溯源。"
       : "（无结果）";
     return { content: [{ type: "text", text }] };
   },
 );
 
 server.tool(
-  "akm_get",
+  "stillyou_get",
   "取单个条目的全文、元数据与溯源（会记一次访问，强化该条目）。",
-  { id: z.string().describe("条目 id（akm_search 返回的方括号内哈希）") },
+  { id: z.string().describe("条目 id（stillyou_search 返回的方括号内哈希）") },
   async ({ id }) => {
     const entry = readManifests(ledger).get(id);
     if (!entry) return { content: [{ type: "text", text: `条目不存在: ${id}` }] };
@@ -69,7 +69,7 @@ server.tool(
 );
 
 server.tool(
-  "akm_register",
+  "stillyou_register",
   "把一个交付物或结论登记进账本（无 hook 的宿主用这个显式登记）。同名条目自动升版本。",
   {
     type: z.enum(["file", "conclusion", "decision"]),

@@ -3,10 +3,10 @@ import { homedir } from "node:os";
 import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, appendFileSync, writeFileSync, writeSync } from "node:fs";
 import { Config, Entry, JournalLine, ProjectMarker } from "./schema";
 
-// AKM_HOME 可用环境变量覆盖（测试隔离用）
-export const AKM_HOME = process.env.AKM_HOME ?? join(homedir(), ".akm");
-export const CONFIG_PATH = join(AKM_HOME, "config.json");
-export const CACHE_DIR = join(AKM_HOME, "cache");
+// STILLYOU_HOME 可用环境变量覆盖（测试隔离用）
+export const STILLYOU_HOME = process.env.STILLYOU_HOME ?? join(homedir(), ".stillyou");
+export const CONFIG_PATH = join(STILLYOU_HOME, "config.json");
+export const CACHE_DIR = join(STILLYOU_HOME, "cache");
 
 export function loadConfig(): Config | null {
   try {
@@ -17,7 +17,7 @@ export function loadConfig(): Config | null {
 }
 
 export function saveConfig(config: Config): void {
-  mkdirSync(AKM_HOME, { recursive: true });
+  mkdirSync(STILLYOU_HOME, { recursive: true });
   writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n");
 }
 
@@ -102,11 +102,12 @@ export function writeEntryBody(ledger: string, e: Entry, body: string): Entry {
   return { ...e, body: rel };
 }
 
-// 向上发现 .akm 标记：cwd → 根。找到则 project scope，否则全局
+// 向上发现 .stillyou 标记：cwd → 根。找到则 project scope，否则全局
 export function discoverProject(cwd: string): ProjectMarker | null {
   let dir = cwd;
   for (;;) {
-    const marker = join(dir, ".akm");
+    // 兼容旧标记名 .akm（改名前创建的项目）
+    const marker = [join(dir, ".stillyou"), join(dir, ".akm")].find(existsSync) ?? join(dir, ".stillyou");
     if (existsSync(marker)) {
       try {
         return ProjectMarker.parse(JSON.parse(readFileSync(marker, "utf8")));

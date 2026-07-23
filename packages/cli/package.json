@@ -1,9 +1,9 @@
 {
-  "name": "akm",
-  "version": "0.1.0",
+  "name": "stillyou",
+  "version": "0.1.1",
   "type": "module",
-  "bin": { "akm": "src/main.ts" },
+  "bin": { "stillyou": "src/main.ts" },
   "dependencies": {
-    "@akm/core": "workspace:*"
+    "@stillyou/core": "workspace:*"
   }
 }

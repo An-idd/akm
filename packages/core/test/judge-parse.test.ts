@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseVerdict } from "@akm/core";
+import { parseVerdict } from "@stillyou/core";
 
 test("歧义滑向 unsure，绝不滑向 supersedes", () => {
   expect(parseVerdict("unsure — it might supersede but I can't tell")).toBe("unsure");

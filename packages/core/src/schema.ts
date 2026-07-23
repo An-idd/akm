@@ -59,7 +59,7 @@ export const Config = z.object({
 });
 export type Config = z.infer<typeof Config>;
 
-// <project>/.akm 标记文件：项目身份+局部配置，不存数据
+// <project>/.stillyou 标记文件：项目身份+局部配置，不存数据
 export const ProjectMarker = z.object({
   project: z.string(),
 });

@@ -1,10 +1,10 @@
 import { copyFileSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
-import { AKM_HOME, CACHE_DIR, CONFIG_PATH, ledgerPaths } from "./ledger";
+import { STILLYOU_HOME, CACHE_DIR, CONFIG_PATH, ledgerPaths } from "./ledger";
 import { Config } from "./schema";
 
-export const DEFAULT_LEDGER = join(homedir(), "Documents", "akm-ledger");
+export const DEFAULT_LEDGER = join(homedir(), "Documents", "stillyou-ledger");
 
 export function initLedger(ledger: string): Config {
   const p = ledgerPaths(ledger);
@@ -16,17 +16,17 @@ export function initLedger(ledger: string): Config {
   let existing: Record<string, unknown> = {};
   try { existing = JSON.parse(readFileSync(CONFIG_PATH, "utf8")); } catch {}
   const config = Config.parse({ ...existing, ledger });
-  mkdirSync(AKM_HOME, { recursive: true });
+  mkdirSync(STILLYOU_HOME, { recursive: true });
   writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n");
   return config;
 }
 
 // 宿主适配薄壳：把 hooks 合并进 Claude Code settings.json，幂等。
-// akmCmd 形如 "akm" 或 "bun /abs/main.ts"（开发期）。
+// akmCmd 形如 "stillyou" 或 "bun /abs/main.ts"（开发期）。
 // includeDistill=false（每日批处理模式）：不注册 Stop/SessionEnd，且摘掉已有的 distill hooks
 export function installClaudeHooks(settingsPath: string, akmCmd: string, includeDistill = true): void {
   // 改宿主配置前先备份——站在别人客厅里要懂规矩
-  if (existsSync(settingsPath)) copyFileSync(settingsPath, settingsPath + ".akm-bak");
+  if (existsSync(settingsPath)) copyFileSync(settingsPath, settingsPath + ".stillyou-bak");
   const settings = existsSync(settingsPath)
     ? JSON.parse(readFileSync(settingsPath, "utf8"))
     : {};
@@ -48,7 +48,7 @@ export function installClaudeHooks(settingsPath: string, akmCmd: string, include
       const groups: any[] = settings.hooks[event] ?? [];
       for (const g of groups) {
         g.hooks = (g.hooks ?? []).filter(
-          (h: any) => !(typeof h.command === "string" && h.command.includes("akm") &&
+          (h: any) => !(typeof h.command === "string" && /(stillyou|akm)/.test(h.command) &&
             h.command.split(/\s+/).includes("distill")),
         );
       }
@@ -58,10 +58,10 @@ export function installClaudeHooks(settingsPath: string, akmCmd: string, include
   }
   for (const [event, matcher, command, sub, timeout] of want) {
     const groups: any[] = (settings.hooks[event] ??= []);
-    // 幂等：已有 akm 同子命令的 hook 则更新命令，否则追加
+    // 幂等：已有 stillyou 同子命令的 hook 则更新命令，否则追加
     let hook = groups
       .flatMap((g) => g.hooks ?? [])
-      .find((h) => typeof h.command === "string" && h.command.includes("akm") && h.command.split(/\s+/).includes(sub));
+      .find((h) => typeof h.command === "string" && /(stillyou|akm)/.test(h.command) && h.command.split(/\s+/).includes(sub));
     if (hook) {
       hook.command = command;
       hook.timeout = timeout;
@@ -76,7 +76,7 @@ export function installClaudeHooks(settingsPath: string, akmCmd: string, include
   writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n");
 }
 
-// 卸载 = 从 settings.json 摘掉 akm hooks。账本文件原样保留——删掉工具剩下可 grep 的普通文件。
+// 卸载 = 从 settings.json 摘掉 stillyou hooks。账本文件原样保留——删掉工具剩下可 grep 的普通文件。
 export function uninstallClaudeHooks(settingsPath: string): void {
   if (!existsSync(settingsPath)) return;
   const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
@@ -85,7 +85,7 @@ export function uninstallClaudeHooks(settingsPath: string): void {
     if (!groups) continue;
     for (const g of groups) {
       g.hooks = (g.hooks ?? []).filter(
-        (h: any) => !(typeof h.command === "string" && h.command.includes("akm") &&
+        (h: any) => !(typeof h.command === "string" && /(stillyou|akm)/.test(h.command) &&
           h.command.split(/\s+/).some((t: string) => ["capture", "distill", "hydrate"].includes(t))),
       );
     }
@@ -96,7 +96,7 @@ export function uninstallClaudeHooks(settingsPath: string): void {
 }
 
 export function writeProjectMarker(dir: string, project: string): string {
-  const path = join(dir, ".akm");
+  const path = join(dir, ".stillyou");
   writeFileSync(path, JSON.stringify({ project }, null, 2) + "\n");
   return path;
 }

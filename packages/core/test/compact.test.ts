@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { compactLedger, CompactResult, MockProvider, type Entry } from "@akm/core";
+import { compactLedger, CompactResult, MockProvider, type Entry } from "@stillyou/core";
 
 function entry(id: string, name: string, over: Partial<Entry> = {}): Entry {
   return {

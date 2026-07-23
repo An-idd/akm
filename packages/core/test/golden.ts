@@ -13,7 +13,7 @@ import {
   JournalLine,
   MockProvider,
   type JudgeVerdict,
-} from "@akm/core";
+} from "@stillyou/core";
 
 const FIXED_NOW = "2026-01-01T00:00:00.000Z";
 

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { findConflicts, ConflictResult, MockProvider, type Entry } from "@akm/core";
+import { findConflicts, ConflictResult, MockProvider, type Entry } from "@stillyou/core";
 
 function entry(id: string, name: string, over: Partial<Entry> = {}): Entry {
   return {

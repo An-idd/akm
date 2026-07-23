@@ -10,7 +10,7 @@ export function estimateTokens(text: string): number {
 export function buildHydrationContext(hits: SearchHit[], budgetTokens: number): string {
   if (!hits.length) return "";
   const header =
-    "[akm] 你的历史产出物账本里有以下相关条目（`akm search <关键词>` 查更多，`akm get <id>` 看全文与溯源）：\n";
+    "[stillyou] 你的历史产出物账本里有以下相关条目（`stillyou search <关键词>` 查更多，`stillyou get <id>` 看全文与溯源）：\n";
   let out = header;
   let used = estimateTokens(header);
   let added = 0;

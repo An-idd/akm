@@ -1,5 +1,5 @@
 #!/usr/bin/env bun
-// akm CLI 薄壳：所有逻辑在 @akm/core，这里只做命令路由与 stdin/stdout。
+// stillyou CLI 薄壳：所有逻辑在 @stillyou/core，这里只做命令路由与 stdin/stdout。
 import { basename, join } from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
@@ -9,7 +9,7 @@ import {
   appendManifests,
   buildHydrationContext,
   CACHE_DIR,
-  AKM_HOME,
+  STILLYOU_HOME,
   ClaudeCliProvider,
   condenseTranscript,
   CONFIG_PATH,
@@ -36,7 +36,7 @@ import {
   writeProjectMarker,
   type Config,
   type Provider,
-} from "@akm/core";
+} from "@stillyou/core";
 
 const CLAUDE_SETTINGS =
   process.env.CLAUDE_SETTINGS ?? join(homedir(), ".claude", "settings.json");
@@ -64,25 +64,25 @@ function arg(flags: string[], name: string): string | undefined {
 }
 
 function makeProvider(): Provider {
-  // 测试注入：AKM_PROVIDER=mock + AKM_MOCK_JSON=<file>
-  if (process.env.AKM_PROVIDER === "mock") {
-    const mock = process.env.AKM_MOCK_JSON
-      ? JSON.parse(readFileSync(process.env.AKM_MOCK_JSON, "utf8"))
+  // 测试注入：STILLYOU_PROVIDER=mock + STILLYOU_MOCK_JSON=<file>
+  if (process.env.STILLYOU_PROVIDER === "mock") {
+    const mock = process.env.STILLYOU_MOCK_JSON
+      ? JSON.parse(readFileSync(process.env.STILLYOU_MOCK_JSON, "utf8"))
       : {};
-    const { CompactResult } = require("@akm/core");
+    const { CompactResult } = require("@stillyou/core");
     return new MockProvider(
       DistillResult.parse(mock.distill ?? { items: [] }),
       mock.judge ?? "unsure",
       CompactResult.parse(mock.compact ?? { clusters: [] }),
     );
   }
-  return new ClaudeCliProvider(process.env.AKM_MODEL ?? "haiku");
+  return new ClaudeCliProvider(process.env.STILLYOU_MODEL ?? "haiku");
 }
 
 function requireConfig(): Config {
   const config = loadConfig();
   if (!config) {
-    console.error("akm 未初始化，先跑 `akm init`");
+    console.error("stillyou 未初始化，先跑 `stillyou init`");
     process.exit(1);
   }
   return config;
@@ -113,24 +113,24 @@ async function cmdInit(flags: string[]) {
   console.log(`账本已建：${config.ledger}`);
   console.log(`配置已写：${CONFIG_PATH}`);
   console.log(`Claude Code hooks 已注册：${CLAUDE_SETTINGS}（capture/distill/hydrate）`);
-  console.log(`提示：项目目录里跑 \`akm init --project\` 可启用项目作用域。`);
+  console.log(`提示：项目目录里跑 \`stillyou init --project\` 可启用项目作用域。`);
 }
 
 // PostToolUse hook：零 LLM，静默失败，不阻塞宿主——关键路径上的代码必须笨
 async function cmdCapture() {
   try {
-    if (process.env.AKM_DISTILLING) return;
+    if (process.env.STILLYOU_DISTILLING) return;
     const config = loadConfig();
     if (!config) return;
     const input = await readStdinJson();
     const path: string | undefined =
       input?.tool_input?.file_path ?? input?.tool_input?.notebook_path;
     if (!path || !validSession(input.session_id)) return;
-    // 账本与缓存自身的写入不记录，避免自反馈（精确前缀匹配，不误伤路径里碰巧含 .akm 的文件）
+    // 账本与缓存自身的写入不记录，避免自反馈（精确前缀匹配，不误伤路径里碰巧含 .stillyou 的文件）
     if (
       path === config.ledger || path.startsWith(config.ledger + "/") ||
-      path === AKM_HOME || path.startsWith(AKM_HOME + "/") ||
-      basename(path) === ".akm"
+      path === STILLYOU_HOME || path.startsWith(STILLYOU_HOME + "/") ||
+      basename(path) === ".stillyou" || basename(path) === ".akm"
     ) return;
     appendJournal(config.ledger, JournalLine.parse({
       ts: new Date().toISOString(),
@@ -172,7 +172,7 @@ function fileHash(path: string): string | undefined {
 async function cmdDistill(flags: string[]) {
   let sessionRef = "";
   try {
-    if (process.env.AKM_DISTILLING) return; // 防 claude -p 递归
+    if (process.env.STILLYOU_DISTILLING) return; // 防 claude -p 递归
     const config = loadConfig();
     if (!config) return;
     const input = await readStdinJson();
@@ -207,7 +207,7 @@ async function cmdDistill(flags: string[]) {
     if (process.stdout.isTTY && result !== "done") console.log(`（${result === "skipped" ? "无新内容，跳过" : "零产出"}）`);
   } catch (err) {
     recordDistillError(sessionRef, err);
-    if (process.env.AKM_DEBUG) console.error("[akm distill]", err);
+    if (process.env.STILLYOU_DEBUG) console.error("[stillyou distill]", err);
   }
 }
 
@@ -274,7 +274,7 @@ async function distillOne(
       existing: others,
       allEntries: all,
       provider: makeProvider(),
-      model: process.env.AKM_MODEL ?? "haiku",
+      model: process.env.STILLYOU_MODEL ?? "haiku",
     });
     if (!entries.length) return "empty";
     const retired = retireReplaced(prior, entries);
@@ -337,10 +337,10 @@ async function cmdDistillAll() {
     } catch (err) {
       failed++;
       recordDistillError(session, err);
-      if (process.env.AKM_DEBUG) console.error(`[akm distill-all] ${session}`, err);
+      if (process.env.STILLYOU_DEBUG) console.error(`[stillyou distill-all] ${session}`, err);
     }
   }
-  console.log(`批处理完成：${done} 个会话入账，${skipped} 个无新内容，${failed} 个失败${failed ? "（见 akm status）" : ""}。`);
+  console.log(`批处理完成：${done} 个会话入账，${skipped} 个无新内容，${failed} 个失败${failed ? "（见 stillyou status）" : ""}。`);
 }
 
 async function cmdSearch(flags: string[]) {
@@ -362,13 +362,13 @@ async function cmdSearch(flags: string[]) {
       `- [${h.id}] ${h.name}@v${h.version} (${h.type}/${h.status}${h.stale ? "/stale" : ""}, ${h.created.slice(0, 10)}${h.verified ? ", verified" : ""}) ${h.summary}`,
     );
   }
-  console.log(`\n用 \`akm get <id>\` 看全文与溯源`);
+  console.log(`\n用 \`stillyou get <id>\` 看全文与溯源`);
 }
 
 async function cmdGet(flags: string[]) {
   const config = requireConfig();
   const id = flags.find((f) => !f.startsWith("--"));
-  if (!id) return console.log("用法: akm get <id>");
+  if (!id) return console.log("用法: stillyou get <id>");
   const entry = readManifests(config.ledger).get(id);
   if (!entry) return console.log(`条目不存在: ${id}`);
   recordAccess(id); // 被采用即强化——用进废退
@@ -416,7 +416,7 @@ async function cmdMigrate() {
 // 账本压实：合并同主题条目。手动触发——自动合并的成本和惊吓都不可控
 async function cmdCompact(flags: string[]) {
   const config = requireConfig();
-  const { compactLedger } = await import("@akm/core");
+  const { compactLedger } = await import("@stillyou/core");
   const all = readManifests(config.ledger);
   const bodyOf = (id: string) => {
     const e = all.get(id);
@@ -459,7 +459,7 @@ async function cmdCompact(flags: string[]) {
 // 只报告——绝不自动改状态。结果缓存供 status 提示。
 async function cmdConflicts() {
   const config = requireConfig();
-  const { findConflicts } = await import("@akm/core");
+  const { findConflicts } = await import("@stillyou/core");
   const all = readManifests(config.ledger);
   const bodyOf = (id: string) => {
     const e = all.get(id);
@@ -490,8 +490,8 @@ async function cmdConflicts() {
 // 会话导出：jsonl → 可读 markdown（对话全文 + 文件写入标记）
 async function cmdExport(flags: string[]) {
   const target = flags.find((f) => !f.startsWith("--"));
-  if (!target) return console.log("用法: akm export <会话id|jsonl路径> [--out <文件>]");
-  const { renderTranscript } = await import("@akm/core");
+  if (!target) return console.log("用法: stillyou export <会话id|jsonl路径> [--out <文件>]");
+  const { renderTranscript } = await import("@stillyou/core");
   let path = target;
   if (!existsSync(path)) {
     const hit = findTranscript(target);
@@ -532,7 +532,7 @@ function maybeSpawnDailyBatch(config: Config): void {
 
 async function cmdHydrate() {
   try {
-    if (process.env.AKM_DISTILLING) return;
+    if (process.env.STILLYOU_DISTILLING) return;
     const config = loadConfig();
     if (!config) return;
     maybeSpawnDailyBatch(config);
@@ -548,7 +548,7 @@ async function cmdHydrate() {
       let hstate: Record<string, boolean> = {};
       try { hstate = JSON.parse(readFileSync(hstateFile, "utf8")); } catch {}
       if (session && hstate[session]) return;
-      const { promptToTokens } = await import("@akm/core");
+      const { promptToTokens } = await import("@stillyou/core");
       const hits = search({
         anyTokens: promptToTokens(input.prompt.slice(0, 400)),
         project,
@@ -564,11 +564,11 @@ async function cmdHydrate() {
       const all = search({ project, limit: 1000, staleDays: config.stale_days });
       if (!all.length) return; // 空账本零注入——宁可不注入，不可注入垃圾
       const prefs = all.filter((h) => h.type === "preference");
-      const { estimateTokens } = await import("@akm/core");
-      const guide = `账本有 ${all.length} 条活跃条目；需要历史结论/文件/口径时用 \`akm search <关键词>\`（相关条目会在你第一条消息后自动注入）。\n`;
+      const { estimateTokens } = await import("@stillyou/core");
+      const guide = `账本有 ${all.length} 条活跃条目；需要历史结论/文件/口径时用 \`stillyou search <关键词>\`（相关条目会在你第一条消息后自动注入）。\n`;
       // 导览行计入同一预算，不绕核算
       context = buildHydrationContext(prefs, config.hydrate_budget - estimateTokens(guide));
-      context += `${context ? "" : "[akm] "}${guide}`;
+      context += `${context ? "" : "[stillyou] "}${guide}`;
     }
 
     if (!context) return;
@@ -584,7 +584,7 @@ async function cmdHydrate() {
 async function cmdVerify(flags: string[]) {
   const config = requireConfig();
   const id = flags.find((f) => !f.startsWith("--"));
-  if (!id) return console.log("用法: akm verify <id> [--by <名字>]");
+  if (!id) return console.log("用法: stillyou verify <id> [--by <名字>]");
   const entry = readManifests(config.ledger).get(id);
   if (!entry) return console.log(`条目不存在: ${id}`);
   const by = arg(flags, "--by") ?? process.env.USER ?? "me";
@@ -614,7 +614,7 @@ async function cmdStatus() {
   }
   const activeCount = entries.filter((e) => e.status !== "superseded" && e.status !== "quarantined").length;
   const staleHits = search({ limit: 1000, staleDays: config.stale_days }).filter((h) => h.stale);
-  console.log(`# akm 账本健康报表`);
+  console.log(`# stillyou 账本健康报表`);
   console.log(`账本：${config.ledger}`);
   console.log(`条目：${entries.length} 条（${Object.entries(byType).map(([k, v]) => `${k} ${v}`).join("，") || "空"}）`);
   console.log(`状态：${Object.entries(byStatus).map(([k, v]) => `${k} ${v}`).join("，") || "—"}`);
@@ -624,7 +624,7 @@ async function cmdStatus() {
     for (const h of staleHits.slice(0, 5)) console.log(`  - [${h.id}] ${h.name} ${h.summary.slice(0, 40)}`);
   }
   if (activeCount > 50) {
-    console.log(`\n💡 活跃条目已达 ${activeCount} 条，可跑 \`akm compact\` 合并同主题条目（先 --dry 看方案）。`);
+    console.log(`\n💡 活跃条目已达 ${activeCount} 条，可跑 \`stillyou compact\` 合并同主题条目（先 --dry 看方案）。`);
   }
   try {
     const errInfo = JSON.parse(readFileSync(join(CACHE_DIR, "last-distill-error.json"), "utf8"));
@@ -634,25 +634,25 @@ async function cmdStatus() {
   } catch {}
   try {
     const c = JSON.parse(readFileSync(join(CACHE_DIR, "last-conflicts.json"), "utf8"));
-    if (c.count > 0) console.log(`\n⚠ 上次扫描发现 ${c.count} 对疑似矛盾（${String(c.at).slice(0, 16)}），跑 \`akm conflicts\` 看详情。`);
+    if (c.count > 0) console.log(`\n⚠ 上次扫描发现 ${c.count} 对疑似矛盾（${String(c.at).slice(0, 16)}），跑 \`stillyou conflicts\` 看详情。`);
   } catch {}
   if (!entries.length) console.log(`\n账本为空。跑几个会写文件的会话，Stop hook 会自动蒸馏入账。`);
 }
 
-const LAUNCH_DIR = process.env.AKM_LAUNCH_DIR ?? join(homedir(), "Library", "LaunchAgents");
-const PLIST_PATH = join(LAUNCH_DIR, "com.akm.daily-distill.plist");
+const LAUNCH_DIR = process.env.STILLYOU_LAUNCH_DIR ?? join(homedir(), "Library", "LaunchAgents");
+const PLIST_PATH = join(LAUNCH_DIR, "com.stillyou.daily-distill.plist");
 
 function launchctl(action: "load" | "unload"): void {
-  if (process.env.AKM_NO_LAUNCHCTL) return; // 测试环境不碰真 launchd
+  if (process.env.STILLYOU_NO_LAUNCHCTL) return; // 测试环境不碰真 launchd
   try {
     Bun.spawnSync(["launchctl", action, "-w", PLIST_PATH], { stdout: "ignore", stderr: "ignore" });
   } catch {}
 }
 
-// 每日定时蒸馏：launchd 定时拉起 akm distill-all，跑完即退（不是常驻守护进程）
+// 每日定时蒸馏：launchd 定时拉起 stillyou distill-all，跑完即退（不是常驻守护进程）
 async function cmdSchedule(flags: string[]) {
   const config = requireConfig();
-  const { saveConfig } = await import("@akm/core");
+  const { saveConfig } = await import("@stillyou/core");
   if (flags.includes("--off")) {
     launchctl("unload");
     try { unlinkSync(PLIST_PATH); } catch {}
@@ -663,14 +663,14 @@ async function cmdSchedule(flags: string[]) {
   }
   const at = arg(flags, "--at") ?? "04:00";
   const m = at.match(/^(\d{1,2}):(\d{2})$/);
-  if (!m) return console.log("用法: akm schedule [--at HH:MM] 或 akm schedule --off");
+  if (!m) return console.log("用法: stillyou schedule [--at HH:MM] 或 stillyou schedule --off");
   const prog = Bun.main.startsWith("/$bunfs")
     ? [process.execPath, "distill-all"]
     : [process.execPath, Bun.main, "distill-all"];
   const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0"><dict>
-  <key>Label</key><string>com.akm.daily-distill</string>
+  <key>Label</key><string>com.stillyou.daily-distill</string>
   <key>ProgramArguments</key><array>${prog.map((p) => `<string>${p}</string>`).join("")}</array>
   <key>StartCalendarInterval</key><dict><key>Hour</key><integer>${Number(m[1])}</integer><key>Minute</key><integer>${Number(m[2])}</integer></dict>
   <key>StandardOutPath</key><string>${join(CACHE_DIR, "daily-distill.log")}</string>
@@ -686,26 +686,26 @@ async function cmdSchedule(flags: string[]) {
   // capture/hydrate 保留（登记和注入仍需实时），只把蒸馏从会话结束挪到定时批处理
   installClaudeHooks(CLAUDE_SETTINGS, selfCmd(), false);
   console.log(`每日蒸馏已开启：每天 ${at} launchd 批处理（跑完即退）；若系统未授予定时任务文稿权限，`);
-  console.log(`当天第一次会话也会自动兜底补跑。会话结束不再实时蒸馏；手动补跑：akm distill-all。关闭：akm schedule --off。`);
+  console.log(`当天第一次会话也会自动兜底补跑。会话结束不再实时蒸馏；手动补跑：stillyou distill-all。关闭：stillyou schedule --off。`);
 }
 
 async function cmdUninstall() {
-  const { uninstallClaudeHooks } = await import("@akm/core");
+  const { uninstallClaudeHooks } = await import("@stillyou/core");
   uninstallClaudeHooks(CLAUDE_SETTINGS);
   launchctl("unload");
   try { unlinkSync(PLIST_PATH); console.log("每日蒸馏定时任务已移除。"); } catch {}
-  console.log(`hooks 已摘除（${CLAUDE_SETTINGS}）。账本文件原样保留，重新启用跑 \`akm init\`。`);
+  console.log(`hooks 已摘除（${CLAUDE_SETTINGS}）。账本文件原样保留，重新启用跑 \`stillyou init\`。`);
 }
 
 async function cmdVersion() {
-  console.log("akm 0.1.0");
+  console.log("stillyou 0.1.1");
 }
 
 async function cmdHelp() {
-  console.log(`akm — Agent 产出物管理层
-用法: akm <command>
+  console.log(`stillyou — Agent 产出物管理层
+用法: stillyou <command>
   init [--ledger <path>] [--yes]   初始化账本并注册 Claude Code hooks
-  init --project [name]            在当前目录写入 .akm 项目标记
+  init --project [name]            在当前目录写入 .stillyou 项目标记
   search <关键词…> [--all]         检索条目（相关性×新鲜度×可信度）
   get <id>                         看条目全文与溯源（记一次访问）
   verify <id> [--by <名字>]        人工背书条目（verified 排序上浮、衰减有下限）

@@ -1,5 +1,5 @@
 {
-  "name": "akm-monorepo",
+  "name": "stillyou-monorepo",
   "private": true,
   "workspaces": ["packages/*"],
   "scripts": {

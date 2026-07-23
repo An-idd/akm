@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { parseDistillLenient } from "@akm/core";
+import { parseDistillLenient } from "@stillyou/core";
 
 test("坏 item 只丢单条，不废整批", () => {
   const r = parseDistillLenient({

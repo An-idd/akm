@@ -48,7 +48,7 @@ async function evalOne(transcript: string, i: number): Promise<Sample> {
     rmSync(home, { recursive: true, force: true });
     mkdirSync(home, { recursive: true });
   }
-  const env = { AKM_HOME: home, CLAUDE_SETTINGS: join(home, "settings.json"), AKM_DEBUG: "1" };
+  const env = { STILLYOU_HOME: home, CLAUDE_SETTINGS: join(home, "settings.json"), STILLYOU_DEBUG: "1" };
   const project = basename(transcript).startsWith("agent-")
     ? "subagent"
     : basename(join(transcript, "..")).replace(/^-Users-kk-/, "");

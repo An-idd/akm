@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { retireReplaced, type Entry } from "@akm/core";
+import { retireReplaced, type Entry } from "@stillyou/core";
 
 function entry(id: string, name: string, status: Entry["status"] = "final"): Entry {
   return {

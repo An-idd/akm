@@ -4,11 +4,11 @@ import {
 } from "./provider";
 
 // LLM 经 `claude -p` 子进程调用：复用宿主登录，零 API key。
-// AKM_DISTILLING=1 传给子进程，akm 自己的 hooks 见到即退——防 Stop hook 递归。
+// STILLYOU_DISTILLING=1 传给子进程，stillyou 自己的 hooks 见到即退——防 Stop hook 递归。
 export class ClaudeCliProvider implements Provider {
   constructor(
     private model = "haiku", // ponytail: 蒸馏用便宜模型，质量不够再升配
-    private timeoutMs = Number(process.env.AKM_TIMEOUT_MS ?? 150_000),
+    private timeoutMs = Number(process.env.STILLYOU_TIMEOUT_MS ?? 150_000),
   ) {}
 
   // claude -p 偶发抽风（瞬时故障/输出结构跑偏），整链重试一次就能吃掉这类失败
@@ -25,7 +25,7 @@ export class ClaudeCliProvider implements Provider {
       stdin: new TextEncoder().encode(prompt),
       stdout: "pipe",
       stderr: "ignore",
-      env: { ...process.env, AKM_DISTILLING: "1" },
+      env: { ...process.env, STILLYOU_DISTILLING: "1" },
     });
     const killer = setTimeout(() => proc.kill(), this.timeoutMs);
     try {
