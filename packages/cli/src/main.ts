@@ -131,7 +131,7 @@ async function cmdCapture() {
     if (
       path === config.ledger || path.startsWith(config.ledger + "/") ||
       path === STILLYOU_HOME || path.startsWith(STILLYOU_HOME + "/") ||
-      basename(path) === ".stillyou" || basename(path) === ".akm"
+      basename(path) === ".stillyou"
     ) return;
     appendJournal(config.ledger, JournalLine.parse({
       ts: new Date().toISOString(),

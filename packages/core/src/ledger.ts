@@ -106,8 +106,7 @@ export function writeEntryBody(ledger: string, e: Entry, body: string): Entry {
 export function discoverProject(cwd: string): ProjectMarker | null {
   let dir = cwd;
   for (;;) {
-    // 兼容旧标记名 .akm（改名前创建的项目）
-    const marker = [join(dir, ".stillyou"), join(dir, ".akm")].find(existsSync) ?? join(dir, ".stillyou");
+    const marker = join(dir, ".stillyou");
     if (existsSync(marker)) {
       try {
         return ProjectMarker.parse(JSON.parse(readFileSync(marker, "utf8")));

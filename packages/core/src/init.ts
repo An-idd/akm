@@ -48,7 +48,7 @@ export function installClaudeHooks(settingsPath: string, akmCmd: string, include
       const groups: any[] = settings.hooks[event] ?? [];
       for (const g of groups) {
         g.hooks = (g.hooks ?? []).filter(
-          (h: any) => !(typeof h.command === "string" && /(stillyou|akm)/.test(h.command) &&
+          (h: any) => !(typeof h.command === "string" && h.command.includes("stillyou") &&
             h.command.split(/\s+/).includes("distill")),
         );
       }
@@ -61,7 +61,7 @@ export function installClaudeHooks(settingsPath: string, akmCmd: string, include
     // 幂等：已有 stillyou 同子命令的 hook 则更新命令，否则追加
     let hook = groups
       .flatMap((g) => g.hooks ?? [])
-      .find((h) => typeof h.command === "string" && /(stillyou|akm)/.test(h.command) && h.command.split(/\s+/).includes(sub));
+      .find((h) => typeof h.command === "string" && h.command.includes("stillyou") && h.command.split(/\s+/).includes(sub));
     if (hook) {
       hook.command = command;
       hook.timeout = timeout;
@@ -85,7 +85,7 @@ export function uninstallClaudeHooks(settingsPath: string): void {
     if (!groups) continue;
     for (const g of groups) {
       g.hooks = (g.hooks ?? []).filter(
-        (h: any) => !(typeof h.command === "string" && /(stillyou|akm)/.test(h.command) &&
+        (h: any) => !(typeof h.command === "string" && h.command.includes("stillyou") &&
           h.command.split(/\s+/).some((t: string) => ["capture", "distill", "hydrate"].includes(t))),
       );
     }
