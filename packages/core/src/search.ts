@@ -36,11 +36,19 @@ export function rebuildIndex(ledger: string, db = openDb()): number {
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`,
   );
   const entries = readManifests(ledger);
+  // 正文读取尽力而为：单文件不可读（权限/损坏）只丢该文件的正文召回，不废整个索引
+  const bodyOf = (e: Entry): string => {
+    try {
+      const p = entryBodyAbsPath(ledger, e);
+      return existsSync(p) ? readFileSync(p, "utf8") : "";
+    } catch {
+      return "";
+    }
+  };
   for (const e of entries.values()) {
-    const bodyPath = entryBodyAbsPath(ledger, e);
     insert.run(
       e.id, e.coords.name, e.summary,
-      existsSync(bodyPath) ? readFileSync(bodyPath, "utf8") : "",
+      bodyOf(e),
       e.type, e.status, e.scope,
       e.project ?? "", e.created, e.verified_by.length, e.path ?? "", e.coords.version,
     );

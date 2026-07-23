@@ -97,7 +97,8 @@ async function cmdInit(flags: string[]) {
     console.log(`项目标记已写入 ${path}（project: ${name}）`);
     return;
   }
-  let ledger = arg(flags, "--ledger") ?? DEFAULT_LEDGER;
+  // 已有配置时沿用原账本路径——重新 init 不该悄悄换账本
+  let ledger = arg(flags, "--ledger") ?? loadConfig()?.ledger ?? DEFAULT_LEDGER;
   if (!arg(flags, "--ledger") && !flags.includes("--yes") && process.stdin.isTTY) {
     const rl = require("node:readline/promises").createInterface({
       input: process.stdin,
