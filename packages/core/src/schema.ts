@@ -55,6 +55,7 @@ export const Config = z.object({
   hydrate_budget: z.number().int().positive().default(500), // token 预算
   stale_days: z.number().int().positive().default(30),
   archive_transcripts: z.boolean().default(true), // 蒸馏依据归档（明文对话摘录！放网盘前想清楚）
+  distill_mode: z.enum(["session", "daily"]).default("session"), // daily = launchd 定时批处理，会话结束不实时蒸
 });
 export type Config = z.infer<typeof Config>;
 

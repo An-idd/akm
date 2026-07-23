@@ -1,6 +1,6 @@
 import { dirname, join } from "node:path";
 import { homedir } from "node:os";
-import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, appendFileSync, writeSync } from "node:fs";
+import { closeSync, existsSync, fsyncSync, mkdirSync, openSync, readFileSync, appendFileSync, writeFileSync, writeSync } from "node:fs";
 import { Config, Entry, JournalLine, ProjectMarker } from "./schema";
 
 // AKM_HOME 可用环境变量覆盖（测试隔离用）
@@ -14,6 +14,11 @@ export function loadConfig(): Config | null {
   } catch {
     return null;
   }
+}
+
+export function saveConfig(config: Config): void {
+  mkdirSync(AKM_HOME, { recursive: true });
+  writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n");
 }
 
 export function ledgerPaths(ledger: string) {

@@ -12,15 +12,19 @@ export function initLedger(ledger: string): Config {
   mkdirSync(p.entriesDir, { recursive: true });
   if (!existsSync(p.manifests)) writeFileSync(p.manifests, "");
   mkdirSync(CACHE_DIR, { recursive: true });
-  const config = Config.parse({ ledger });
+  // 重复 init 不清洗已有配置（预算、蒸馏模式等自定义保留）
+  let existing: Record<string, unknown> = {};
+  try { existing = JSON.parse(readFileSync(CONFIG_PATH, "utf8")); } catch {}
+  const config = Config.parse({ ...existing, ledger });
   mkdirSync(AKM_HOME, { recursive: true });
   writeFileSync(CONFIG_PATH, JSON.stringify(config, null, 2) + "\n");
   return config;
 }
 
-// 宿主适配薄壳：把三个 hook 合并进 Claude Code settings.json，幂等。
-// akmCmd 形如 "akm" 或 "bun /abs/main.ts"（开发期）
-export function installClaudeHooks(settingsPath: string, akmCmd: string): void {
+// 宿主适配薄壳：把 hooks 合并进 Claude Code settings.json，幂等。
+// akmCmd 形如 "akm" 或 "bun /abs/main.ts"（开发期）。
+// includeDistill=false（每日批处理模式）：不注册 Stop/SessionEnd，且摘掉已有的 distill hooks
+export function installClaudeHooks(settingsPath: string, akmCmd: string, includeDistill = true): void {
   // 改宿主配置前先备份——站在别人客厅里要懂规矩
   if (existsSync(settingsPath)) copyFileSync(settingsPath, settingsPath + ".akm-bak");
   const settings = existsSync(settingsPath)
@@ -30,11 +34,28 @@ export function installClaudeHooks(settingsPath: string, akmCmd: string): void {
   // distill 用 --detach：hook 秒退，LLM 蒸馏在脱离的后台进程里跑，不卡宿主回合收尾
   const want: Array<[event: string, matcher: string | undefined, cmd: string, sub: string, timeout: number]> = [
     ["PostToolUse", "Write|Edit|MultiEdit|NotebookEdit", `${akmCmd} capture`, "capture", 15],
-    ["Stop", undefined, `${akmCmd} distill --detach --debounce`, "distill", 15], // 回合级触发要防抖
-    ["SessionEnd", undefined, `${akmCmd} distill --detach`, "distill", 15], // 最后机会，必蒸
+    ...(includeDistill
+      ? ([
+          ["Stop", undefined, `${akmCmd} distill --detach --debounce`, "distill", 15], // 回合级触发要防抖
+          ["SessionEnd", undefined, `${akmCmd} distill --detach`, "distill", 15], // 最后机会，必蒸
+        ] as Array<[string, string | undefined, string, string, number]>)
+      : []),
     ["SessionStart", undefined, `${akmCmd} hydrate`, "hydrate", 15],
     ["UserPromptSubmit", undefined, `${akmCmd} hydrate`, "hydrate", 15], // 首条消息的相关性注入，纯本地毫秒级
   ];
+  if (!includeDistill) {
+    for (const event of ["Stop", "SessionEnd"]) {
+      const groups: any[] = settings.hooks[event] ?? [];
+      for (const g of groups) {
+        g.hooks = (g.hooks ?? []).filter(
+          (h: any) => !(typeof h.command === "string" && h.command.includes("akm") &&
+            h.command.split(/\s+/).includes("distill")),
+        );
+      }
+      settings.hooks[event] = groups.filter((g) => (g.hooks ?? []).length > 0);
+      if (!settings.hooks[event].length) delete settings.hooks[event];
+    }
+  }
   for (const [event, matcher, command, sub, timeout] of want) {
     const groups: any[] = (settings.hooks[event] ??= []);
     // 幂等：已有 akm 同子命令的 hook 则更新命令，否则追加

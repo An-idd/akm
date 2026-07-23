@@ -108,7 +108,7 @@ async function cmdInit(flags: string[]) {
     if (answer) ledger = answer;
   }
   const config = initLedger(ledger);
-  installClaudeHooks(CLAUDE_SETTINGS, selfCmd());
+  installClaudeHooks(CLAUDE_SETTINGS, selfCmd(), config.distill_mode !== "daily");
   rebuildIndex(config.ledger);
   console.log(`账本已建：${config.ledger}`);
   console.log(`配置已写：${CONFIG_PATH}`);
@@ -168,51 +168,85 @@ async function cmdDistill(flags: string[]) {
     const session: string | undefined = input.session_id ?? arg(flags, "--session");
     if (!session || !validSession(session)) return;
     sessionRef = session;
-    const journal = readJournal(config.ledger, session);
-    // ponytail: 只蒸馏写过文件的会话；纯对话会话的结论蒸馏等真实需求出现再开
-    if (!journal.length) return;
-    const stateFile = join(CACHE_DIR, "distill-state.json");
-    let state: Record<string, { lines: number; at?: number }> = {};
-    try { state = JSON.parse(readFileSync(stateFile, "utf8")); } catch {}
-    if (state[session]?.lines === journal.length && !flags.includes("--force")) return;
-    // 防抖（Stop 每回合都触发）：增量小且离上次近就等一等；SessionEnd 不带此 flag，必蒸
-    if (flags.includes("--debounce") && !flags.includes("--force")) {
-      const st = state[session];
-      if (st && journal.length - st.lines < 5 && Date.now() - (st.at ?? 0) < 15 * 60_000) return;
-    }
     const transcriptPath: string | undefined = input.transcript_path ?? arg(flags, "--transcript");
-    const cwd: string = input.cwd ?? arg(flags, "--cwd") ?? journal[0]!.cwd;
+    const cwd: string | undefined = input.cwd ?? arg(flags, "--cwd");
 
     // hook 模式秒退：重活派给脱离的后台进程，宿主回合收尾零等待
     if (flags.includes("--detach")) {
+      const journal = readJournal(config.ledger, session);
+      if (!journal.length) return;
       const argv = Bun.main.startsWith("/$bunfs") ? [process.execPath] : ["bun", Bun.main];
       const child = Bun.spawn(
-        [...argv, "distill", "--session", session, "--cwd", cwd,
+        [...argv, "distill", "--session", session, "--cwd", cwd ?? journal[0]!.cwd,
           ...(transcriptPath ? ["--transcript", transcriptPath] : []),
-          ...(flags.includes("--force") ? ["--force"] : [])],
+          ...(flags.includes("--force") ? ["--force"] : []),
+          ...(flags.includes("--debounce") ? ["--debounce"] : [])],
         { stdin: "ignore", stdout: "ignore", stderr: "ignore", env: process.env as Record<string, string> },
       );
       child.unref();
       return;
     }
 
-    // 同会话蒸馏互斥：原子创建（wx），拿不到锁就让位；10 分钟以上视为死锁残留清掉重试
-    const lock = join(CACHE_DIR, `distill-${session}.lock`);
+    const result = await distillOne(config, session, {
+      transcriptPath,
+      cwd,
+      force: flags.includes("--force"),
+      debounce: flags.includes("--debounce"),
+    });
+    if (process.stdout.isTTY && result !== "done") console.log(`（${result === "skipped" ? "无新内容，跳过" : "零产出"}）`);
+  } catch (err) {
+    recordDistillError(sessionRef, err);
+    if (process.env.AKM_DEBUG) console.error("[akm distill]", err);
+  }
+}
+
+function recordDistillError(session: string, err: unknown): void {
+  // 静默不阻塞宿主，但命门不能坏得无声：失败落痕，status 会提醒
+  try {
+    writeFileSync(join(CACHE_DIR, "last-distill-error.json"), JSON.stringify({
+      session,
+      at: new Date().toISOString(),
+      error: String(err).split("\n")[0],
+    }));
+  } catch {}
+}
+
+// 蒸馏一个会话：锁 → 管线 → 落盘 → 状态。cmdDistill（hook/手动）与 distill-all（每日批处理）共用
+async function distillOne(
+  config: Config,
+  session: string,
+  opts: { transcriptPath?: string; cwd?: string; force?: boolean; debounce?: boolean } = {},
+): Promise<"done" | "skipped" | "empty"> {
+  const journal = readJournal(config.ledger, session);
+  // ponytail: 只蒸馏写过文件的会话；纯对话会话的结论蒸馏等真实需求出现再开
+  if (!journal.length) return "skipped";
+  const stateFile = join(CACHE_DIR, "distill-state.json");
+  let state: Record<string, { lines: number; at?: number }> = {};
+  try { state = JSON.parse(readFileSync(stateFile, "utf8")); } catch {}
+  if (state[session]?.lines === journal.length && !opts.force) return "skipped";
+  // 防抖（Stop 每回合都触发）：增量小且离上次近就等一等；SessionEnd/批处理不防抖，必蒸
+  if (opts.debounce && !opts.force) {
+    const st = state[session];
+    if (st && journal.length - st.lines < 5 && Date.now() - (st.at ?? 0) < 15 * 60_000) return "skipped";
+  }
+
+  // 同会话蒸馏互斥：原子创建（wx），拿不到锁就让位；10 分钟以上视为死锁残留清掉重试
+  const lock = join(CACHE_DIR, `distill-${session}.lock`);
+  try {
+    writeFileSync(lock, String(process.pid), { flag: "wx" });
+  } catch {
     try {
-      writeFileSync(lock, String(process.pid), { flag: "wx" });
+      if (Date.now() - statSync(lock).mtimeMs > 10 * 60_000) {
+        unlinkSync(lock);
+        writeFileSync(lock, String(process.pid), { flag: "wx" });
+      } else return "skipped";
     } catch {
-      try {
-        if (Date.now() - statSync(lock).mtimeMs > 10 * 60_000) {
-          unlinkSync(lock);
-          writeFileSync(lock, String(process.pid), { flag: "wx" });
-        } else return;
-      } catch {
-        return;
-      }
+      return "skipped";
     }
-    try {
-    const transcriptSummary = transcriptPath ? condenseTranscript(transcriptPath) : "";
-    const project = discoverProject(cwd)?.project;
+  }
+  try {
+    const transcriptSummary = opts.transcriptPath ? condenseTranscript(opts.transcriptPath) : "";
+    const project = discoverProject(opts.cwd ?? journal[0]!.cwd)?.project;
     const all = readManifests(config.ledger);
     const prior = [...all.values()].filter(
       (e) => e.provenance.session === session && e.status !== "superseded",
@@ -231,7 +265,7 @@ async function cmdDistill(flags: string[]) {
       provider: makeProvider(),
       model: process.env.AKM_MODEL ?? "haiku",
     });
-    if (!entries.length) return;
+    if (!entries.length) return "empty";
     const retired = retireReplaced(prior, entries);
     const paths = ledgerPaths(config.ledger);
     // 正文按坐标落盘：entries/<ns>/<name>/v<N>-<id8>.md，manifest 记相对路径
@@ -250,21 +284,43 @@ async function cmdDistill(flags: string[]) {
       state[session] = { lines: journal.length, at: Date.now() };
       writeFileSync(stateFile, JSON.stringify(state));
     } catch {}
-    if (process.stdout.isTTY) console.log(`蒸馏入账 ${entries.length} 条${retired.length ? `，替换旧产出 ${retired.length} 条` : ""}`);
-    } finally {
-      try { unlinkSync(lock); } catch {}
-    }
-  } catch (err) {
-    // 静默不阻塞宿主，但命门不能坏得无声：失败落痕，status 会提醒
-    try {
-      writeFileSync(join(CACHE_DIR, "last-distill-error.json"), JSON.stringify({
-        session: sessionRef,
-        at: new Date().toISOString(),
-        error: String(err).split("\n")[0],
-      }));
-    } catch {}
-    if (process.env.AKM_DEBUG) console.error("[akm distill]", err);
+    if (process.stdout.isTTY) console.log(`[${session.slice(0, 8)}] 蒸馏入账 ${entries.length} 条${retired.length ? `，替换旧产出 ${retired.length} 条` : ""}`);
+    return "done";
+  } finally {
+    try { unlinkSync(lock); } catch {}
   }
+}
+
+// 在 ~/.claude/projects 里按会话 id 找会话记录
+function findTranscript(session: string): string | undefined {
+  const projectsDir = join(homedir(), ".claude", "projects");
+  if (!existsSync(projectsDir)) return undefined;
+  return readdirSync(projectsDir)
+    .map((d) => join(projectsDir, d, `${session}.jsonl`))
+    .find((p) => existsSync(p));
+}
+
+// 每日批处理：把所有有新写入的会话一次蒸完（launchd 定时拉起，跑完即退）
+async function cmdDistillAll() {
+  const config = requireConfig();
+  const journalDir = ledgerPaths(config.ledger).journalDir;
+  if (!existsSync(journalDir)) return console.log("（无 journal）");
+  const sessions = readdirSync(journalDir)
+    .filter((f) => f.endsWith(".jsonl"))
+    .map((f) => f.replace(/\.jsonl$/, ""))
+    .filter(validSession);
+  let done = 0, skipped = 0, failed = 0;
+  for (const session of sessions) {
+    try {
+      const r = await distillOne(config, session, { transcriptPath: findTranscript(session) });
+      r === "done" ? done++ : skipped++;
+    } catch (err) {
+      failed++;
+      recordDistillError(session, err);
+      if (process.env.AKM_DEBUG) console.error(`[akm distill-all] ${session}`, err);
+    }
+  }
+  console.log(`批处理完成：${done} 个会话入账，${skipped} 个无新内容，${failed} 个失败${failed ? "（见 akm status）" : ""}。`);
 }
 
 async function cmdSearch(flags: string[]) {
@@ -418,14 +474,8 @@ async function cmdExport(flags: string[]) {
   const { renderTranscript } = await import("@akm/core");
   let path = target;
   if (!existsSync(path)) {
-    // 按会话 id 在 ~/.claude/projects 里找
-    const projectsDir = join(homedir(), ".claude", "projects");
-    const hit = existsSync(projectsDir)
-      ? readdirSync(projectsDir)
-          .map((d) => join(projectsDir, d, `${target}.jsonl`))
-          .find((p) => existsSync(p))
-      : undefined;
-    if (!hit) return console.log(`找不到会话 ${target}（查了 ${projectsDir}）`);
+    const hit = findTranscript(target);
+    if (!hit) return console.log(`找不到会话 ${target}（查了 ~/.claude/projects）`);
     path = hit;
   }
   const md = renderTranscript(path);
@@ -542,9 +592,61 @@ async function cmdStatus() {
   if (!entries.length) console.log(`\n账本为空。跑几个会写文件的会话，Stop hook 会自动蒸馏入账。`);
 }
 
+const LAUNCH_DIR = process.env.AKM_LAUNCH_DIR ?? join(homedir(), "Library", "LaunchAgents");
+const PLIST_PATH = join(LAUNCH_DIR, "com.akm.daily-distill.plist");
+
+function launchctl(action: "load" | "unload"): void {
+  if (process.env.AKM_NO_LAUNCHCTL) return; // 测试环境不碰真 launchd
+  try {
+    Bun.spawnSync(["launchctl", action, "-w", PLIST_PATH], { stdout: "ignore", stderr: "ignore" });
+  } catch {}
+}
+
+// 每日定时蒸馏：launchd 定时拉起 akm distill-all，跑完即退（不是常驻守护进程）
+async function cmdSchedule(flags: string[]) {
+  const config = requireConfig();
+  const { saveConfig } = await import("@akm/core");
+  if (flags.includes("--off")) {
+    launchctl("unload");
+    try { unlinkSync(PLIST_PATH); } catch {}
+    saveConfig({ ...config, distill_mode: "session" });
+    installClaudeHooks(CLAUDE_SETTINGS, selfCmd(), true);
+    console.log("每日蒸馏已关闭，恢复会话结束实时蒸馏（Stop/SessionEnd hooks 已重新注册）。");
+    return;
+  }
+  const at = arg(flags, "--at") ?? "04:00";
+  const m = at.match(/^(\d{1,2}):(\d{2})$/);
+  if (!m) return console.log("用法: akm schedule [--at HH:MM] 或 akm schedule --off");
+  const prog = Bun.main.startsWith("/$bunfs")
+    ? [process.execPath, "distill-all"]
+    : [process.execPath, Bun.main, "distill-all"];
+  const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.akm.daily-distill</string>
+  <key>ProgramArguments</key><array>${prog.map((p) => `<string>${p}</string>`).join("")}</array>
+  <key>StartCalendarInterval</key><dict><key>Hour</key><integer>${Number(m[1])}</integer><key>Minute</key><integer>${Number(m[2])}</integer></dict>
+  <key>StandardOutPath</key><string>${join(CACHE_DIR, "daily-distill.log")}</string>
+  <key>StandardErrorPath</key><string>${join(CACHE_DIR, "daily-distill.log")}</string>
+</dict></plist>
+`;
+  const { mkdirSync } = await import("node:fs");
+  mkdirSync(LAUNCH_DIR, { recursive: true });
+  launchctl("unload");
+  writeFileSync(PLIST_PATH, plist);
+  launchctl("load");
+  saveConfig({ ...config, distill_mode: "daily" });
+  // capture/hydrate 保留（登记和注入仍需实时），只把蒸馏从会话结束挪到定时批处理
+  installClaudeHooks(CLAUDE_SETTINGS, selfCmd(), false);
+  console.log(`每日蒸馏已开启：每天 ${at} 批处理当日所有有新写入的会话（launchd 拉起，跑完即退）。`);
+  console.log(`会话结束不再实时蒸馏；想立刻补跑：akm distill-all。关闭：akm schedule --off。`);
+}
+
 async function cmdUninstall() {
   const { uninstallClaudeHooks } = await import("@akm/core");
   uninstallClaudeHooks(CLAUDE_SETTINGS);
+  launchctl("unload");
+  try { unlinkSync(PLIST_PATH); console.log("每日蒸馏定时任务已移除。"); } catch {}
   console.log(`hooks 已摘除（${CLAUDE_SETTINGS}）。账本文件原样保留，重新启用跑 \`akm init\`。`);
 }
 
@@ -564,9 +666,11 @@ async function cmdHelp() {
   compact [--dry]                  压实账本：合并同主题条目（保守，拿不准不动）
   conflicts                        扫出事实矛盾的条目对（只报告，你来定夺）
   export <会话id|路径> [--out f]   会话记录导出为可读 markdown
+  schedule [--at HH:MM] | --off    每日定时蒸馏（默认 04:00；开启后会话结束不实时蒸）
+  distill-all                      立刻批处理所有有新写入的会话
   rebuild                          全量重建索引（索引永远是缓存）
   migrate                          旧扁平正文迁移到坐标目录
-  uninstall                        摘除 hooks（账本文件原样保留）
+  uninstall                        摘除 hooks 和定时任务（账本文件原样保留）
   capture / distill / hydrate      (hooks) 由宿主调用
   version                          版本`);
 }
@@ -578,6 +682,8 @@ const commands: Record<string, (flags: string[]) => Promise<void>> = {
   init: cmdInit,
   capture: cmdCapture,
   distill: cmdDistill,
+  "distill-all": cmdDistillAll,
+  schedule: cmdSchedule,
   search: cmdSearch,
   get: cmdGet,
   verify: cmdVerify,

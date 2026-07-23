@@ -6,6 +6,7 @@ SCRATCH="$(mktemp -d)"
 trap 'rm -rf "$SCRATCH"' EXIT
 export AKM_HOME="$SCRATCH/.akm" CLAUDE_SETTINGS="$SCRATCH/.claude/settings.json"
 export AKM_PROVIDER=mock AKM_MOCK_JSON="$SCRATCH/mock.json"
+export AKM_LAUNCH_DIR="$SCRATCH/launch" AKM_NO_LAUNCHCTL=1
 akm() { bun "$ROOT/packages/cli/src/main.ts" "$@"; }
 fail() { echo "❌ $1"; exit 1; }
 
@@ -200,6 +201,33 @@ EOF
 echo "{\"session_id\":\"s6\",\"transcript_path\":\"$SCRATCH/transcript.jsonl\"}" | akm distill
 [ -f "$SCRATCH/ledger/journal/s6.transcript.md" ] && fail "关闭归档仍写了 transcript"
 grep -q 's6-doc' "$SCRATCH/ledger/manifests.jsonl" || fail "关闭归档影响了入账"
+
+# 每日模式：schedule 开启 → plist 落盘、distill hooks 摘除、capture/hydrate 保留
+akm schedule --at 03:30 | grep -q '每日蒸馏已开启' || fail "schedule 开启失败"
+[ -f "$SCRATCH/launch/com.akm.daily-distill.plist" ] || fail "plist 未写入"
+grep -q '<integer>30</integer>' "$SCRATCH/launch/com.akm.daily-distill.plist" || fail "plist 时间错误"
+grep -qE 'akm.* distill' "$CLAUDE_SETTINGS" && fail "daily 模式仍注册 distill hooks"
+grep -q 'capture' "$CLAUDE_SETTINGS" || fail "capture hook 被误删"
+grep -q '"distill_mode": "daily"' "$AKM_HOME/config.json" || fail "config 未记 daily 模式"
+
+# distill-all：批处理待蒸会话
+echo "s7" > "$SCRATCH/project/s7.md"
+echo "{\"session_id\":\"s7\",\"cwd\":\"$SCRATCH/project\",\"tool_name\":\"Write\",\"tool_input\":{\"file_path\":\"$SCRATCH/project/s7.md\"}}" | akm capture
+cat > "$SCRATCH/mock.json" <<EOF
+{"distill":{"items":[{"type":"file","name":"s7-doc","summary":"每日批处理测试","status":"final","path":"$SCRATCH/project/s7.md"}]}}
+EOF
+akm distill-all | grep -q '1 个会话入账' || fail "distill-all 未按预期入账"
+grep -q 's7-doc' "$SCRATCH/ledger/manifests.jsonl" || fail "批处理产物缺失"
+
+# 重复 init 不洗配置、不在 daily 模式装回 distill hooks
+akm init --yes --ledger "$SCRATCH/ledger" >/dev/null
+grep -q '"distill_mode": "daily"' "$AKM_HOME/config.json" || fail "init 洗掉了 distill_mode"
+grep -qE 'akm.* distill' "$CLAUDE_SETTINGS" && fail "init 在 daily 模式下装回 distill hooks"
+
+# schedule --off 恢复实时蒸馏
+akm schedule --off | grep -q '已关闭' || fail "schedule 关闭失败"
+[ -f "$SCRATCH/launch/com.akm.daily-distill.plist" ] && fail "plist 未删除"
+grep -q 'distill --detach --debounce' "$CLAUDE_SETTINGS" || fail "off 后未恢复实时蒸馏 hooks"
 
 # uninstall：hooks 摘除、账本保留
 akm uninstall >/dev/null

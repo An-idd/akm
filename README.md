@@ -69,6 +69,8 @@ Most of the time you do nothing. When you want to look things up:
 | `akm status` | Ledger health report: entry breakdown, stale warnings, failed-distill alerts |
 | `akm compact [--dry]` | Consolidate same-topic entries. Conservative — uncertain clusters are left alone; sources become superseded, never deleted |
 | `akm export <session-id>` | Export a session transcript as readable markdown (`--out` to save) |
+| `akm schedule --at 04:00` | Switch to daily batch distillation: nothing runs at session end; one scheduled batch per day (`--off` to restore realtime) |
+| `akm distill-all` | Batch-distill every session with new writes, right now |
 | `akm init --project` | Enable project scope in a directory: its entries won't leak into other projects' sessions |
 | `akm rebuild` | Rebuild the index from scratch (the index is always a disposable cache) |
 | `akm migrate` | Migrate legacy flat entry bodies into coordinate directories (`entries/self/<name>/v<N>-….md`) |
@@ -110,6 +112,7 @@ The fields are the product: `coords` is a stable address (same topic iterates un
 - **The write path is free**: capture is a local append; no model is called
 - **Distillation cost, honestly**: distillation calls haiku via `claude -p`, on your own Claude login (no API key). Trigger rule: at turn end, if the session added ≥5 file writes or 15+ minutes passed since the last distill, one background distill runs; session end always distills once. Sessions that write nothing cost nothing. A long, busy session may distill several to a dozen times a day — one haiku call each
 - **Zero waiting**: hooks return in milliseconds; distillation runs in a detached background process
+- **Prefer once a day?** `akm schedule --at 04:00` switches to daily batch mode: zero calls at session end; launchd fires once nightly and distills every session with new writes (run-and-exit, not a daemon). Trade-off: today's distillate becomes injectable tomorrow
 - **Everything local**: ledger, index, and archives live on your disk; the only network call is the distillation above, on your own account
 - **Archive disclosure (important)**: distillation archives a **plaintext** excerpt of the conversation into the ledger (`journal/<session>.transcript.md`) for provenance audits. If your ledger sits in a cloud-synced folder, that sync includes conversation text. Disable with `"archive_transcripts": false` in `~/.akm/config.json` (trade-off: provenance breaks once the host cleans up old sessions)
 - **Prompt-injection status, honestly**: third-party content your agent processes (web pages, external files) flows into distillation input. Three hard defenses exist (file-path allowlist, verification bits force-cleared by the pipeline, human-verified entries never auto-superseded), but injected content is not yet fully sanitized — the threat model is limited while you're single-user on your own data, and full hardening lands before external content-pack imports ship. Don't blindly trust a distill run right after your agent processed untrusted content
