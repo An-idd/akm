@@ -84,6 +84,14 @@ You can also just ask your agent — the injected context includes `akm search` 
 - **Not recorded**: intermediate artifacts, drafts, replaced versions, chat-only sessions (sessions that write no files cost nothing and record nothing) — **capture everything, distill little; forgetting is a feature, not a bug**
 - **Automatic metabolism**: new versions supersede old ones (uncertain cases coexist; entries you've verified are never auto-superseded); entries unretrieved for 30 days get demoted and flagged in `status` (staleness is computed at query time — ledger files are never rewritten); frequently used entries rank up; preference entries never decay. Files over 4MB are recorded by path without a content hash
 
+## The longer you use it, the more it sounds like you
+
+Short-term, akm lets you "pick up where you left off." Long-term, the ledger accumulates four things: your **decision patterns** (decision entries capture not just conclusions but how you repeatedly choose and what you habitually reject), your **working rules** (preferences: "just fix it, don't ask", "measure it this way"), your **verified conclusions** (separating *what you signed off on* from *what the AI said*), and your **definitions** (how you name and measure things). Together, that's a searchable, externalized copy of your judgment.
+
+Three self-reinforcing loops drive it: preferences injected at every session start make the agent work by your rules, and its output gets distilled back (a style loop); `verify` and access-based reinforcement float the knowledge you actually use and decay what you don't — **the ledger's shape is carved by your behavior**; `compact` then crystallizes scattered judgments into stable position cards. The longer you use it, the more each new session feels like working with a colleague who knows you, not a stranger meeting you for the first time.
+
+Honest boundary: it only sees the part of your work done with an agent, distillation is a lossy probabilistic paraphrase (which is exactly why `verify` requires your own signature), and forgetting is deliberate. It's not a digital twin — it can't answer "who are you," but it can answer "**when this kind of thing came up, how did you judge it, what did you verify, what burned you**." Which happens to be the most useful part of you for the next session.
+
 ## Where the data lives, and what it looks like
 
 ```
