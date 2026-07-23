@@ -10,12 +10,12 @@ Every session ends in amnesia: the deliverables, the decisions, the rejected alt
 
 ```console
 $ claude
-> 继续上次的 AI 视频工具选型
+> Continue the AI video tool comparison from last time
 
-⏺ 你的账本里有相关历史：
+⏺ Your ledger has relevant history:
   [5802983d] video-tool-pricing-comparison@v1 (file/final, verified)
-  上次结论：按每秒成本算可灵最划算（¥66/月 ≈ 66 秒）。
-  基于该口径做增量对比，不重新推导……
+  Last conclusion: Kling wins on cost-per-second (¥66/mo ≈ 66s of video).
+  Building the incremental comparison on that methodology — not re-deriving it...
 ```
 
 *A fresh session, zero re-explaining. That answer cites a ledger entry distilled from a session three weeks ago — same methodology, human-verified conclusion.*
