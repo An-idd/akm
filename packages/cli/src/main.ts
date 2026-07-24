@@ -674,6 +674,7 @@ async function cmdSchedule(flags: string[]) {
   <key>Label</key><string>com.stillyou.daily-distill</string>
   <key>ProgramArguments</key><array>${prog.map((p) => `<string>${p}</string>`).join("")}</array>
   <key>StartCalendarInterval</key><dict><key>Hour</key><integer>${Number(m[1])}</integer><key>Minute</key><integer>${Number(m[2])}</integer></dict>
+  <key>EnvironmentVariables</key><dict><key>PATH</key><string>${process.env.PATH ?? "/usr/bin:/bin"}</string></dict>
   <key>StandardOutPath</key><string>${join(CACHE_DIR, "daily-distill.log")}</string>
   <key>StandardErrorPath</key><string>${join(CACHE_DIR, "daily-distill.log")}</string>
 </dict></plist>

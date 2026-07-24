@@ -21,7 +21,9 @@ export class ClaudeCliProvider implements Provider {
   }
 
   private async run(prompt: string): Promise<string> {
-    const proc = Bun.spawn(["claude", "-p", "--output-format", "json", "--model", this.model], {
+    // launchd 等极简 PATH 环境下解析绝对路径；找不到再按名字碰运气
+    const claude = Bun.which("claude") ?? "claude";
+    const proc = Bun.spawn([claude, "-p", "--output-format", "json", "--model", this.model], {
       stdin: new TextEncoder().encode(prompt),
       stdout: "pipe",
       stderr: "ignore",
