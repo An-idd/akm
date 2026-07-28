@@ -1,3 +1,6 @@
+import { unlinkSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
 import {
   CompactResult, ConflictResult, DistillResult, JudgeVerdict,
   parseCompactLenient, parseConflictsLenient, parseDistillLenient, Provider,
@@ -36,6 +39,7 @@ export class ClaudeCliProvider implements Provider {
       if (proc.exitCode !== 0) throw new Error(`claude -p exit ${proc.exitCode}`);
       const wrapper = JSON.parse(out);
       if (typeof wrapper.result !== "string") throw new Error("no result field");
+      cleanupOwnTranscript(wrapper.session_id);
       return wrapper.result;
     } finally {
       clearTimeout(killer);
@@ -58,6 +62,17 @@ export class ClaudeCliProvider implements Provider {
   async conflicts(prompt: string): Promise<ConflictResult> {
     return this.withRetry(async () => parseConflictsLenient(extractJson(await this.run(prompt))));
   }
+}
+
+// claude -p 的每次运行也会被 Claude Code 记进会话历史，蒸馏器自己的运行用后即删，
+// 不污染 resume 列表。删失败不影响蒸馏结果，静默放过。
+export function cleanupOwnTranscript(sessionId: unknown) {
+  if (typeof sessionId !== "string" || !/^[\w-]+$/.test(sessionId)) return;
+  try {
+    const projects = join(homedir(), ".claude", "projects");
+    for (const f of new Bun.Glob(`*/${sessionId}.jsonl`).scanSync({ cwd: projects, absolute: true }))
+      unlinkSync(f);
+  } catch {}
 }
 
 // 裁决解析：歧义必须滑向 unsure（最安全），绝不滑向 supersedes（最危险）
