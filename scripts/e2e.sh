@@ -219,6 +219,25 @@ EOF
 stillyou distill-all | grep -q '1 个会话入账' || fail "distill-all 未按预期入账"
 grep -q 's7-doc' "$SCRATCH/ledger/manifests.jsonl" || fail "批处理产物缺失"
 
+# 先结清 s4 悬账（失败可观测测试留下 journal>state 的 pending，会吃掉下面的结论 mock）
+cat > "$SCRATCH/mock.json" <<EOF
+{"distill":{"items":[{"type":"file","name":"db3-doc","summary":"结清悬账","status":"final","path":"$SCRATCH/project/db3.md"}]}}
+EOF
+echo "{\"session_id\":\"s4\",\"transcript_path\":\"$SCRATCH/transcript.jsonl\"}" | stillyou distill
+
+# Cowork 会话：无 journal，凭 audit.jsonl 蒸结论；重跑无新内容跳过
+mkdir -p "$SCRATCH/cowork/org1/acct1/local_cw000001"
+cat > "$SCRATCH/cowork/org1/acct1/local_cw000001/audit.jsonl" <<EOF
+{"type":"user","message":{"role":"user","content":"选题方向怎么定？"}}
+{"type":"assistant","message":{"role":"assistant","content":[{"type":"text","text":"结论：先验证供给再动笔。"}]}}
+EOF
+cat > "$SCRATCH/mock.json" <<EOF
+{"distill":{"items":[{"type":"conclusion","name":"cowork-conc","summary":"Cowork 会话结论测试","status":"final","body":"先验证供给再动笔。"}]}}
+EOF
+STILLYOU_COWORK_DIR="$SCRATCH/cowork" stillyou distill-all | grep -q '1 个会话入账' || fail "cowork 会话未入账"
+grep -q '"host":"cowork"' "$SCRATCH/ledger/manifests.jsonl" || fail "cowork 溯源 host 缺失"
+STILLYOU_COWORK_DIR="$SCRATCH/cowork" stillyou distill-all | grep -q '0 个会话入账' || fail "cowork 重跑未跳过"
+
 # 重复 init 不洗配置、不在 daily 模式装回 distill hooks
 stillyou init --yes --ledger "$SCRATCH/ledger" >/dev/null
 grep -q '"distill_mode": "daily"' "$STILLYOU_HOME/config.json" || fail "init 洗掉了 distill_mode"

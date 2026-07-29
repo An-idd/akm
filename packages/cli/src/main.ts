@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 // stillyou CLI 薄壳：所有逻辑在 @stillyou/core，这里只做命令路由与 stdin/stdout。
-import { basename, join } from "node:path";
+import { basename, dirname, join } from "node:path";
 import { homedir } from "node:os";
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, statSync, unlinkSync, writeFileSync, readdirSync } from "node:fs";
@@ -227,19 +227,21 @@ function recordDistillError(session: string, err: unknown): void {
 async function distillOne(
   config: Config,
   session: string,
-  opts: { transcriptPath?: string; cwd?: string; force?: boolean; debounce?: boolean } = {},
+  opts: { transcriptPath?: string; cwd?: string; force?: boolean; debounce?: boolean; host?: string } = {},
 ): Promise<"done" | "skipped" | "empty"> {
   const journal = readJournal(config.ledger, session);
-  // ponytail: 只蒸馏写过文件的会话；纯对话会话的结论蒸馏等真实需求出现再开
-  if (!journal.length) return "skipped";
+  // 无 journal 的会话（Cowork 等挂不了 hook 的宿主）凭会话记录蒸结论/决策/偏好；
+  // 文件类条目走 journal 白名单，天然为空——沙箱里的路径本来也没用
+  const lines = journal.length || transcriptLines(opts.transcriptPath);
+  if (!lines) return "skipped";
   const stateFile = join(CACHE_DIR, "distill-state.json");
   let state: Record<string, { lines: number; at?: number }> = {};
   try { state = JSON.parse(readFileSync(stateFile, "utf8")); } catch {}
-  if (state[session]?.lines === journal.length && !opts.force) return "skipped";
+  if (state[session]?.lines === lines && !opts.force) return "skipped";
   // 防抖（Stop 每回合都触发）：增量小且离上次近就等一等；SessionEnd/批处理不防抖，必蒸
   if (opts.debounce && !opts.force) {
     const st = state[session];
-    if (st && journal.length - st.lines < 5 && Date.now() - (st.at ?? 0) < 15 * 60_000) return "skipped";
+    if (st && lines - st.lines < 5 && Date.now() - (st.at ?? 0) < 15 * 60_000) return "skipped";
   }
 
   // 同会话蒸馏互斥：原子创建（wx），拿不到锁就让位；10 分钟以上视为死锁残留清掉重试
@@ -258,7 +260,8 @@ async function distillOne(
   }
   try {
     const transcriptSummary = opts.transcriptPath ? condenseTranscript(opts.transcriptPath) : "";
-    const project = discoverProject(opts.cwd ?? journal[0]!.cwd)?.project;
+    const base = opts.cwd ?? journal[0]?.cwd;
+    const project = base ? discoverProject(base)?.project : undefined;
     const all = readManifests(config.ledger);
     const prior = [...all.values()].filter(
       (e) => e.provenance.session === session && e.status !== "superseded",
@@ -267,7 +270,7 @@ async function distillOne(
     const others = new Map([...all].filter(([, e]) => e.provenance.session !== session));
     const { entries, bodies } = await distillSession({
       session,
-      host: "claude-code",
+      host: opts.host ?? "claude-code",
       now: new Date().toISOString(),
       journal,
       transcriptSummary,
@@ -293,7 +296,7 @@ async function distillOne(
     appendManifests(config.ledger, [...withBodies, ...retired]);
     rebuildIndex(config.ledger);
     try {
-      state[session] = { lines: journal.length, at: Date.now() };
+      state[session] = { lines, at: Date.now() };
       writeFileSync(stateFile, JSON.stringify(state));
     } catch {}
     if (process.stdout.isTTY) console.log(`[${session.slice(0, 8)}] 蒸馏入账 ${entries.length} 条${retired.length ? `，替换旧产出 ${retired.length} 条` : ""}`);
@@ -301,6 +304,32 @@ async function distillOne(
   } finally {
     try { unlinkSync(lock); } catch {}
   }
+}
+
+// 无 journal 会话的蒸馏依据量：会话记录行数（既当"有无内容"判据，也当增量水位）
+function transcriptLines(path?: string): number {
+  if (!path || !existsSync(path)) return 0;
+  try {
+    return readFileSync(path, "utf8").split("\n").filter((l) => l.trim()).length;
+  } catch {
+    return 0;
+  }
+}
+
+// Cowork（桌面 App 本地代理模式）挂不了 hook，聊天记录在 App 数据目录里，批处理直接扫。
+// 每个会话一个 local_<id>/audit.jsonl，记录格式与 Claude Code 会话记录同构。
+function coworkSessions(): Array<{ session: string; transcript: string }> {
+  const root =
+    process.env.STILLYOU_COWORK_DIR ??
+    join(homedir(), "Library", "Application Support", "Claude", "local-agent-mode-sessions");
+  const out: Array<{ session: string; transcript: string }> = [];
+  try {
+    for (const audit of new Bun.Glob("*/*/local_*/audit.jsonl").scanSync({ cwd: root, absolute: true })) {
+      const id = basename(dirname(audit)).slice("local_".length);
+      if (validSession(id)) out.push({ session: id, transcript: audit });
+    }
+  } catch {}
+  return out;
 }
 
 // 在 ~/.claude/projects 里按会话 id 找会话记录
@@ -329,11 +358,16 @@ async function cmdDistillAll() {
     }
   } catch {}
   const sessions = [...known].filter(validSession);
-  if (!sessions.length) return console.log("（无已知会话）");
+  const cowork = coworkSessions().filter((c) => !known.has(c.session));
+  if (!sessions.length && !cowork.length) return console.log("（无已知会话）");
   let done = 0, skipped = 0, failed = 0;
-  for (const session of sessions) {
+  const jobs: Array<[string, { transcriptPath?: string; host?: string }]> = [
+    ...sessions.map((s): [string, { transcriptPath?: string; host?: string }] => [s, { transcriptPath: findTranscript(s) }]),
+    ...cowork.map((c): [string, { transcriptPath?: string; host?: string }] => [c.session, { transcriptPath: c.transcript, host: "cowork" }]),
+  ];
+  for (const [session, o] of jobs) {
     try {
-      const r = await distillOne(config, session, { transcriptPath: findTranscript(session) });
+      const r = await distillOne(config, session, o);
       r === "done" ? done++ : skipped++;
     } catch (err) {
       failed++;
