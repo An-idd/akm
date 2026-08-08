@@ -104,7 +104,7 @@ export function promptToTokens(prompt: string, max = 24): string[] {
 export function search(opts: SearchOpts, db = openDb()): SearchHit[] {
   const { query, project, includeSuperseded = false, limit = 10, staleDays = 30 } = opts;
   const now = opts.now ?? new Date();
-  let rows: Array<Record<string, any>>;
+  let rows: any[]; // FTS5 行是动态列，每处赋值都已 as any[]——收窄到 Record 反而与 scoreEntry 参数对不上
 
   const tokens = (query ?? "").trim().split(/\s+/).filter(Boolean);
   if (opts.anyTokens?.length) {
@@ -145,21 +145,26 @@ export function search(opts: SearchOpts, db = openDb()): SearchHit[] {
     if (r.scope === "project" && r.project !== (project ?? "")) continue;
     const stat = stats.get(r.id);
     const lastTouch = stat?.last_accessed ? Date.parse(stat.last_accessed) : Date.parse(r.created);
-    const { score, stale } = scoreEntry(r, lastTouch, now, staleDays, -r.rank /* bm25 越小越好 */);
+    const { score, stale } = scoreEntry(
+      r, lastTouch, now, staleDays, -r.rank /* bm25 越小越好 */, stat?.access_count ?? 0,
+    );
     hits.push({ ...(r as any), score, stale });
   }
   hits.sort((a, b) => b.score - a.score);
   return hits.slice(0, limit);
 }
 
-// 打分：相关性 × 新鲜度 × 可信度。
+// 打分：相关性 × 新鲜度 × 可信度 × 有用性。
 // preference 是规则不是时效资产——豁免衰减与 stale；verified 是买不回的资产——衰减有下限。
+// 有用性闭环：access_count 只在 get 时累加（被注入不算，被调出来看了才算），
+// 所以它是"这条真被用上了"的证据，不是"被推荐过"。用进废退在此兑现。
 export function scoreEntry(
   r: { type: string; status: string; created: string; verified: number },
   lastTouchMs: number,
   now: Date,
   staleDays: number,
   relevance: number,
+  accessCount = 0,
 ): { score: number; stale: boolean } {
   const ageDays = Math.max(0, (now.getTime() - Date.parse(r.created)) / 86_400_000);
   const stale = r.type !== "preference" && (now.getTime() - lastTouchMs) / 86_400_000 > staleDays;
@@ -167,7 +172,10 @@ export function scoreEntry(
   const floor = r.verified > 0 ? 0.3 : 0;
   const freshness = Math.max(decay, floor) * (stale ? 0.3 : 1);
   const trust = (1 + 0.5 * r.verified) * (r.status === "final" ? 1 : 0.6);
-  return { score: relevance * freshness * trust, stale };
+  // ponytail: log 而非线性——强化必须有天花板，否则热条目滚雪球把新条目永久压在下面。
+  // 只加成不惩罚（没被调用过 = ×1）：没人看过的好条目不该因此被埋。
+  const usefulness = 1 + 0.3 * Math.log1p(Math.max(0, accessCount));
+  return { score: relevance * freshness * trust * usefulness, stale };
 }
 
 export function recordAccess(id: string, db = openDb(), now = new Date()): void {
